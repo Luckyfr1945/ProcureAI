@@ -1,0 +1,245 @@
+use axum::{
+    extract::State,
+    http::{header, HeaderMap, HeaderValue, StatusCode},
+    response::IntoResponse,
+    Json,
+};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use crate::auth::middleware::AuthenticatedUser;
+use crate::auth::password::{hash_password, verify_password};
+use crate::auth::session::create_session_token;
+use crate::database::repositories::users;
+use crate::models::{CreateUserDto, UserRole};
+use crate::state::AppState;
+
+#[derive(Debug, Deserialize)]
+pub struct LoginDto {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LoginResponseDto {
+    pub message: String,
+    pub token: String,
+    pub user: UserInfoDto,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UserInfoDto {
+    pub id: i64,
+    pub username: String,
+    pub role: String,
+}
+
+pub async fn login(
+    State(state): State<AppState>,
+    Json(dto): Json<LoginDto>,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    if dto.username.trim().is_empty() || dto.password.trim().is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Username and password are required"
+                }
+            })),
+        ));
+    }
+
+    let user = users::get_user_by_username(&state.db, &dto.username)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "error": {
+                        "code": "INTERNAL_ERROR",
+                        "message": format!("Database error: {}", e)
+                    }
+                })),
+            )
+        })?;
+
+    let user = match user {
+        Some(u) => u,
+        None => {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                Json(json!({
+                    "error": {
+                        "code": "INVALID_CREDENTIALS",
+                        "message": "Invalid username or password"
+                    }
+                })),
+            ));
+        }
+    };
+
+    if user.is_active != 1 {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "error": {
+                    "code": "ACCOUNT_DISABLED",
+                    "message": "Account is disabled"
+                }
+            })),
+        ));
+    }
+
+    if !verify_password(&dto.password, &user.password_hash) {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "error": {
+                    "code": "INVALID_CREDENTIALS",
+                    "message": "Invalid username or password"
+                }
+            })),
+        ));
+    }
+
+    // 7 days token expiration
+    let duration_secs = 7 * 24 * 3600;
+    let token = create_session_token(
+        user.id,
+        &user.username,
+        &user.role,
+        &state.config.session_secret,
+        duration_secs,
+    )
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": {
+                    "code": "TOKEN_ERROR",
+                    "message": format!("Failed to generate session token: {}", e)
+                }
+            })),
+        )
+    })?;
+
+    let cookie_val = format!(
+        "session={}; Path=/; HttpOnly; SameSite=Lax; Max-Age={}",
+        token, duration_secs
+    );
+
+    let mut headers = HeaderMap::new();
+    if let Ok(val) = HeaderValue::from_str(&cookie_val) {
+        headers.insert(header::SET_COOKIE, val);
+    }
+
+    let resp_body = Json(json!({
+        "message": "Login successful",
+        "token": token,
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "role": user.role
+        }
+    }));
+
+    Ok((StatusCode::OK, headers, resp_body))
+}
+
+pub async fn logout() -> impl IntoResponse {
+    let mut headers = HeaderMap::new();
+    if let Ok(val) = HeaderValue::from_str("session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0") {
+        headers.insert(header::SET_COOKIE, val);
+    }
+
+    (
+        StatusCode::OK,
+        headers,
+        Json(json!({
+            "message": "Logged out successfully"
+        })),
+    )
+}
+
+pub async fn me(auth_user: AuthenticatedUser) -> impl IntoResponse {
+    Json(json!({
+        "user": {
+            "id": auth_user.user_id,
+            "username": auth_user.username,
+            "role": auth_user.role
+        }
+    }))
+}
+
+pub async fn register_user(
+    State(state): State<AppState>,
+    auth_user: AuthenticatedUser,
+    Json(dto): Json<CreateUserDto>,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    if auth_user.role != "admin" {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "error": {
+                    "code": "FORBIDDEN",
+                    "message": "Only admins can create new users"
+                }
+            })),
+        ));
+    }
+
+    if dto.username.trim().is_empty() || dto.password.trim().is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Username and password are required"
+                }
+            })),
+        ));
+    }
+
+    let password_hash = hash_password(&dto.password).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": {
+                    "code": "CRYPTO_ERROR",
+                    "message": format!("Password hashing failed: {}", e)
+                }
+            })),
+        )
+    })?;
+
+    let role = match dto.role.as_deref() {
+        Some("admin") => UserRole::Admin,
+        _ => UserRole::Purchasing,
+    };
+
+    let user_id = users::create_user(&state.db, &dto.username, &password_hash, role.clone())
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "error": {
+                        "code": "USERNAME_EXISTS",
+                        "message": format!("Failed to create user (username may already exist): {}", e)
+                    }
+                })),
+            )
+        })?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({
+            "message": "User created successfully",
+            "user": {
+                "id": user_id,
+                "username": dto.username,
+                "role": role.to_string()
+            }
+        })),
+    ))
+}

@@ -32,6 +32,26 @@ pub async fn init_pool(database_url: &str) -> anyhow::Result<SqlitePool> {
         .await?;
     tracing::info!("Database migrations applied successfully.");
 
+    // Seed initial admin if empty
+    seed_initial_admin_if_needed(&pool).await?;
+
     Ok(pool)
 }
 
+pub async fn seed_initial_admin_if_needed(pool: &SqlitePool) -> anyhow::Result<()> {
+    let count = repositories::users::count_users(pool).await?;
+    if count == 0 {
+        let admin_password = std::env::var("DEFAULT_ADMIN_PASSWORD")
+            .unwrap_or_else(|_| "AdminProcureAI2026!".to_string());
+        let hash = crate::auth::password::hash_password(&admin_password)?;
+        let id = repositories::users::create_user(
+            pool,
+            "admin",
+            &hash,
+            crate::models::UserRole::Admin,
+        )
+        .await?;
+        tracing::info!("Initialized default administrator user 'admin' (id={})", id);
+    }
+    Ok(())
+}
