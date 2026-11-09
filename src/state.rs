@@ -1,6 +1,6 @@
-use std::sync::Arc;
-use sqlx::SqlitePool;
 use crate::config::Config;
+use sqlx::SqlitePool;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -16,4 +16,3 @@ impl AppState {
         }
     }
 }
-

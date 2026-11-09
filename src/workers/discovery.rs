@@ -1,16 +1,14 @@
-use std::sync::Arc;
-use std::time::Duration;
-use sqlx::SqlitePool;
-use tokio::time::sleep;
 use crate::config::Config;
 use crate::database::repositories::{searches, suppliers};
 use crate::models::{SearchJob, SearchPreferences};
 use crate::providers::gemini::GeminiClient;
-use crate::providers::search::{create_search_provider, SearchProvider};
-use crate::services::{
-    AsyncCrawler, ExtractionService, QueryExpansionService, RankingService,
-};
+use crate::providers::search::{SearchProvider, create_search_provider};
+use crate::services::{AsyncCrawler, ExtractionService, QueryExpansionService, RankingService};
 use crate::utils::url_safety::{extract_domain, normalize_url, validate_url_safety};
+use sqlx::SqlitePool;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::time::sleep;
 
 pub struct DiscoveryWorker {
     config: Arc<Config>,
@@ -23,10 +21,7 @@ pub struct DiscoveryWorker {
 
 impl DiscoveryWorker {
     pub fn new(config: Arc<Config>, db: SqlitePool) -> Self {
-        let gemini = GeminiClient::new(
-            config.gemini_api_key.clone(),
-            config.gemini_model.clone(),
-        );
+        let gemini = GeminiClient::new(config.gemini_api_key.clone(), config.gemini_model.clone());
         let search_provider = create_search_provider(&config);
         let crawler = AsyncCrawler::new(
             config.crawler_timeout_seconds,
@@ -101,11 +96,7 @@ impl DiscoveryWorker {
             .unwrap_or_default();
 
         // 1. Expand query via Gemini
-        let expansion = match self
-            .query_expansion
-            .expand(&job.original_request, 5)
-            .await
-        {
+        let expansion = match self.query_expansion.expand(&job.original_request, 5).await {
             Ok(exp) => exp,
             Err(e) => {
                 let err_msg = format!("Failed query expansion: {}", e);
@@ -134,14 +125,20 @@ impl DiscoveryWorker {
             }
 
             // Check if user requested stop
-            if searches::is_stop_requested(&self.db, job_id).await.unwrap_or(false) {
+            if searches::is_stop_requested(&self.db, job_id)
+                .await
+                .unwrap_or(false)
+            {
                 tracing::info!("Job #{}: Stop requested by user", job_id);
                 searches::update_job_status(&self.db, job_id, "stopped", None).await?;
                 return Ok(());
             }
 
             for page_num in 1..=max_pages_per_query {
-                if searches::is_stop_requested(&self.db, job_id).await.unwrap_or(false) {
+                if searches::is_stop_requested(&self.db, job_id)
+                    .await
+                    .unwrap_or(false)
+                {
                     searches::update_job_status(&self.db, job_id, "stopped", None).await?;
                     return Ok(());
                 }
@@ -150,7 +147,13 @@ impl DiscoveryWorker {
                 let search_page = match self.search_provider.search(query_str, page_num).await {
                     Ok(sp) => sp,
                     Err(e) => {
-                        tracing::warn!("Job #{}: Search provider error for '{}' p.{}: {}", job_id, query_str, page_num, e);
+                        tracing::warn!(
+                            "Job #{}: Search provider error for '{}' p.{}: {}",
+                            job_id,
+                            query_str,
+                            page_num,
+                            e
+                        );
                         break;
                     }
                 };
@@ -186,20 +189,18 @@ impl DiscoveryWorker {
                     }
 
                     // Insert into crawl_pages
-                    if let Ok(Some(page_id)) = searches::insert_crawl_page(
-                        &self.db,
-                        job_id,
-                        &item.url,
-                        &norm_url,
-                        &domain,
-                    )
-                    .await
+                    if let Ok(Some(page_id)) =
+                        searches::insert_crawl_page(&self.db, job_id, &item.url, &norm_url, &domain)
+                            .await
                     {
                         total_discovered_urls += 1;
 
                         // Polite request delay
                         if self.config.crawler_request_delay_ms > 0 {
-                            sleep(Duration::from_millis(self.config.crawler_request_delay_ms.min(100))).await;
+                            sleep(Duration::from_millis(
+                                self.config.crawler_request_delay_ms.min(100),
+                            ))
+                            .await;
                         }
 
                         // Crawl page
@@ -246,7 +247,8 @@ impl DiscoveryWorker {
                                         // Save products
                                         for mut prod in products.clone() {
                                             prod.supplier_id = supplier_id;
-                                            let _ = suppliers::insert_product(&self.db, &prod).await;
+                                            let _ =
+                                                suppliers::insert_product(&self.db, &prod).await;
                                         }
 
                                         // Calculate score
@@ -317,4 +319,3 @@ impl DiscoveryWorker {
         Ok(())
     }
 }
-

@@ -1,5 +1,5 @@
 use axum::body::Body;
-use axum::http::{header, Request, StatusCode};
+use axum::http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
 use procure_ai::api::app_router;
 use procure_ai::config::Config;
@@ -138,4 +138,3 @@ async fn test_auth_protection_and_login() {
     // Clean up
     let _ = tokio::fs::remove_file(test_db_path).await;
 }
-

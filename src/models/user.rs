@@ -61,4 +61,3 @@ impl From<User> for UserResponseDto {
         }
     }
 }
-

@@ -3,4 +3,3 @@ pub mod password;
 pub mod session;
 
 pub use middleware::{AuthenticatedUser, RequireAdmin};
-

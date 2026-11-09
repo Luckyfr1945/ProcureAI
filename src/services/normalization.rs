@@ -26,4 +26,3 @@ pub fn normalize_supplier(mut supplier: Supplier) -> Supplier {
 
     supplier
 }
-

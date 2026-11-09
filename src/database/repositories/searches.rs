@@ -1,8 +1,8 @@
-use sqlx::Row;
-use sqlx::SqlitePool;
 use crate::models::{
     CrawlPage, EnrichedSearchResultDto, ScoreBreakdown, SearchJob, SearchQuery, Supplier,
 };
+use sqlx::Row;
+use sqlx::SqlitePool;
 
 pub async fn create_job(
     pool: &SqlitePool,
@@ -114,12 +114,11 @@ pub async fn request_job_stop(pool: &SqlitePool, job_id: i64) -> anyhow::Result<
 }
 
 pub async fn is_stop_requested(pool: &SqlitePool, job_id: i64) -> anyhow::Result<bool> {
-    let val: Option<i64> = sqlx::query_scalar(
-        "SELECT stop_requested FROM search_jobs WHERE id = $1",
-    )
-    .bind(job_id)
-    .fetch_optional(pool)
-    .await?;
+    let val: Option<i64> =
+        sqlx::query_scalar("SELECT stop_requested FROM search_jobs WHERE id = $1")
+            .bind(job_id)
+            .fetch_optional(pool)
+            .await?;
 
     Ok(val.map(|v| v == 1).unwrap_or(true))
 }
@@ -371,12 +370,10 @@ pub async fn get_job_results(
 }
 
 pub async fn count_job_suppliers(pool: &SqlitePool, job_id: i64) -> anyhow::Result<i64> {
-    let cnt: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM search_results WHERE job_id = $1",
-    )
-    .bind(job_id)
-    .fetch_one(pool)
-    .await?;
+    let cnt: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM search_results WHERE job_id = $1")
+        .bind(job_id)
+        .fetch_one(pool)
+        .await?;
 
     Ok(cnt)
 }

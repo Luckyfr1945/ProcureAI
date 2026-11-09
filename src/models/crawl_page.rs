@@ -38,4 +38,3 @@ pub struct CrawlPage {
     pub discovered_at: String,
     pub fetched_at: Option<String>,
 }
-

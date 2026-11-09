@@ -1,5 +1,5 @@
-use sqlx::SqlitePool;
 use crate::models::{Supplier, SupplierProduct, SupplierSource, UpdateSupplierDto};
+use sqlx::SqlitePool;
 
 pub async fn upsert_supplier(pool: &SqlitePool, s: &Supplier) -> anyhow::Result<i64> {
     let id: i64 = sqlx::query_scalar(
@@ -134,7 +134,9 @@ pub async fn update_supplier(
     let phone = dto.phone.or(existing.phone);
     let category = dto.category.or(existing.category);
     let description = dto.description.or(existing.description);
-    let verification_status = dto.verification_status.unwrap_or(existing.verification_status);
+    let verification_status = dto
+        .verification_status
+        .unwrap_or(existing.verification_status);
 
     let updated = sqlx::query_as::<_, Supplier>(
         r#"

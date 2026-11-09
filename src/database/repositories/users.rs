@@ -1,5 +1,5 @@
-use sqlx::SqlitePool;
 use crate::models::{User, UserRole};
+use sqlx::SqlitePool;
 
 pub async fn create_user(
     pool: &SqlitePool,

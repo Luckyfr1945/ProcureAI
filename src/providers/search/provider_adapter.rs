@@ -1,9 +1,9 @@
+use crate::config::Config;
+use crate::providers::search::traits::{SearchItem, SearchPage, SearchProvider};
 use async_trait::async_trait;
 use reqwest::Client;
 use std::sync::Arc;
 use std::time::Duration;
-use crate::config::Config;
-use crate::providers::search::traits::{SearchItem, SearchPage, SearchProvider};
 
 pub struct MockSearchProvider;
 
@@ -127,12 +127,25 @@ impl SearchProvider for HttpSearchProvider {
 
         // Standardized parsing: works with standard search engine JSON responses
         let mut results = Vec::new();
-        if let Some(items) = resp_json.get("results").or_else(|| resp_json.get("organic_results")) {
+        if let Some(items) = resp_json
+            .get("results")
+            .or_else(|| resp_json.get("organic_results"))
+        {
             if let Some(arr) = items.as_array() {
                 for item in arr {
-                    let url = item.get("url").or_else(|| item.get("link")).and_then(|v| v.as_str());
-                    let title = item.get("title").and_then(|v| v.as_str()).unwrap_or_default();
-                    let snippet = item.get("snippet").or_else(|| item.get("description")).and_then(|v| v.as_str()).unwrap_or_default();
+                    let url = item
+                        .get("url")
+                        .or_else(|| item.get("link"))
+                        .and_then(|v| v.as_str());
+                    let title = item
+                        .get("title")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default();
+                    let snippet = item
+                        .get("snippet")
+                        .or_else(|| item.get("description"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default();
 
                     if let Some(u) = url {
                         results.push(SearchItem {
@@ -164,7 +177,9 @@ pub fn create_search_provider(config: &Config) -> Arc<dyn SearchProvider> {
     match config.search_provider.to_lowercase().as_str() {
         "http" | "serpapi" | "searxng" => {
             if config.search_api_base_url.is_empty() {
-                tracing::warn!("Search API base URL is empty, falling back to mock search provider");
+                tracing::warn!(
+                    "Search API base URL is empty, falling back to mock search provider"
+                );
                 Arc::new(MockSearchProvider)
             } else {
                 Arc::new(HttpSearchProvider::new(
@@ -177,4 +192,3 @@ pub fn create_search_provider(config: &Config) -> Arc<dyn SearchProvider> {
         _ => Arc::new(MockSearchProvider),
     }
 }
-

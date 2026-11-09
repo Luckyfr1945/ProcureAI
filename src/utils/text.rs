@@ -4,7 +4,13 @@ pub fn normalize_company_name(name: &str) -> String {
     let lower = name.to_lowercase();
     let cleaned: String = lower
         .chars()
-        .map(|c| if c.is_alphanumeric() || c.is_whitespace() { c } else { ' ' })
+        .map(|c| {
+            if c.is_alphanumeric() || c.is_whitespace() {
+                c
+            } else {
+                ' '
+            }
+        })
         .collect();
 
     let tokens: Vec<&str> = cleaned
@@ -43,8 +49,5 @@ pub fn calculate_content_hash(content: &str) -> String {
 }
 
 pub fn clean_text(raw: &str) -> String {
-    raw.split_whitespace()
-        .collect::<Vec<&str>>()
-        .join(" ")
+    raw.split_whitespace().collect::<Vec<&str>>().join(" ")
 }
-

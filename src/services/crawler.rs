@@ -1,9 +1,9 @@
-use reqwest::header::CONTENT_TYPE;
-use reqwest::Client;
-use scraper::{Html, Selector};
-use std::time::Duration;
 use crate::utils::text::{calculate_content_hash, clean_text};
 use crate::utils::url_safety::validate_url_safety;
+use reqwest::Client;
+use reqwest::header::CONTENT_TYPE;
+use scraper::{Html, Selector};
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct CrawlResult {
@@ -64,7 +64,11 @@ impl AsyncCrawler {
         }
 
         // 4. Validate content-type is text/html
-        if let Some(ct) = resp.headers().get(CONTENT_TYPE).and_then(|v| v.to_str().ok()) {
+        if let Some(ct) = resp
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+        {
             let ct_lower = ct.to_lowercase();
             if !ct_lower.contains("text/html") && !ct_lower.contains("application/xhtml") {
                 return Err(anyhow::anyhow!("Skipping non-HTML content-type: {}", ct));
@@ -97,7 +101,9 @@ impl AsyncCrawler {
             .unwrap_or_default();
 
         // Meta description
-        let meta_selector = Selector::parse(r#"meta[name="description"], meta[property="og:description"]"#).unwrap();
+        let meta_selector =
+            Selector::parse(r#"meta[name="description"], meta[property="og:description"]"#)
+                .unwrap();
         let meta_description = document
             .select(&meta_selector)
             .next()
@@ -125,7 +131,12 @@ impl AsyncCrawler {
         for link in document.select(&link_selector) {
             if let Some(href) = link.value().attr("href") {
                 if let Some(email) = href.strip_prefix("mailto:") {
-                    let clean_email = email.split('?').next().unwrap_or(email).trim().to_lowercase();
+                    let clean_email = email
+                        .split('?')
+                        .next()
+                        .unwrap_or(email)
+                        .trim()
+                        .to_lowercase();
                     if clean_email.contains('@') && !emails.contains(&clean_email) {
                         emails.push(clean_email);
                     }
@@ -151,4 +162,3 @@ impl AsyncCrawler {
         })
     }
 }
-

@@ -1,14 +1,14 @@
-use axum::{
-    extract::{Path, Query, State},
-    http::StatusCode,
-    Json,
-};
-use serde::Deserialize;
-use serde_json::json;
 use crate::auth::AuthenticatedUser;
 use crate::database::repositories::suppliers;
 use crate::models::{Supplier, SupplierProduct, SupplierSource, UpdateSupplierDto};
 use crate::state::AppState;
+use axum::{
+    Json,
+    extract::{Path, Query, State},
+    http::StatusCode,
+};
+use serde::Deserialize;
+use serde_json::json;
 
 #[derive(Debug, Deserialize)]
 pub struct SupplierListQuery {
@@ -121,19 +121,17 @@ pub async fn get_supplier_sources(
     _user: AuthenticatedUser,
     Path(id): Path<i64>,
 ) -> Result<Json<Vec<SupplierSource>>, (StatusCode, Json<serde_json::Value>)> {
-    let sources = suppliers::get_sources(&state.db, id)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "error": {
-                        "code": "DB_ERROR",
-                        "message": format!("Failed to get supplier sources: {}", e)
-                    }
-                })),
-            )
-        })?;
+    let sources = suppliers::get_sources(&state.db, id).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": {
+                    "code": "DB_ERROR",
+                    "message": format!("Failed to get supplier sources: {}", e)
+                }
+            })),
+        )
+    })?;
 
     Ok(Json(sources))
 }
@@ -143,20 +141,17 @@ pub async fn get_supplier_products(
     _user: AuthenticatedUser,
     Path(id): Path<i64>,
 ) -> Result<Json<Vec<SupplierProduct>>, (StatusCode, Json<serde_json::Value>)> {
-    let products = suppliers::get_products(&state.db, id)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "error": {
-                        "code": "DB_ERROR",
-                        "message": format!("Failed to get supplier products: {}", e)
-                    }
-                })),
-            )
-        })?;
+    let products = suppliers::get_products(&state.db, id).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": {
+                    "code": "DB_ERROR",
+                    "message": format!("Failed to get supplier products: {}", e)
+                }
+            })),
+        )
+    })?;
 
     Ok(Json(products))
 }
-

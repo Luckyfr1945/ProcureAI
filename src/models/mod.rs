@@ -15,4 +15,3 @@ pub use supplier::*;
 pub use supplier_product::*;
 pub use supplier_source::*;
 pub use user::*;
-

@@ -81,4 +81,3 @@ pub struct SearchJobSummaryDto {
     pub stop_requested: bool,
     pub created_at: String,
 }
-

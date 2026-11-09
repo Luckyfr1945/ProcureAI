@@ -1,11 +1,11 @@
-use std::error::Error;
-use std::sync::Arc;
-use tokio::net::TcpListener;
 use procure_ai::api::app_router;
 use procure_ai::config::Config;
 use procure_ai::database::init_pool;
 use procure_ai::state::AppState;
 use procure_ai::workers::DiscoveryWorker;
+use std::error::Error;
+use std::sync::Arc;
+use tokio::net::TcpListener;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

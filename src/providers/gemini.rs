@@ -101,17 +101,16 @@ User request: "{}"
             }
         });
 
-        let resp = self
-            .client
-            .post(&url)
-            .json(&req_body)
-            .send()
-            .await?;
+        let resp = self.client.post(&url).json(&req_body).send().await?;
 
         if !resp.status().is_success() {
             let status = resp.status();
             let err_text = resp.text().await.unwrap_or_default();
-            tracing::warn!("Gemini API error ({}): {}, falling back to heuristic query expansion", status, err_text);
+            tracing::warn!(
+                "Gemini API error ({}): {}, falling back to heuristic query expansion",
+                status,
+                err_text
+            );
             return Ok(self.fallback_query_expansion(request, max_queries));
         }
 
@@ -141,7 +140,10 @@ User request: "{}"
         // Extract key terms that look like models or capitalized specs
         let mut important_specs: Vec<String> = words
             .iter()
-            .filter(|w| w.chars().any(|c| c.is_numeric()) || w.len() > 2 && w.chars().all(|c| c.is_uppercase()))
+            .filter(|w| {
+                w.chars().any(|c| c.is_numeric())
+                    || w.len() > 2 && w.chars().all(|c| c.is_uppercase())
+            })
             .map(|w| w.to_string())
             .collect();
 
@@ -258,7 +260,10 @@ Webpage content:
     ) -> ExtractedSupplierInfo {
         // Fallback rule-based extractor
         let company_name = if !page_title.is_empty() {
-            let name_part = page_title.split(&['|', '-', '—'][..]).next().unwrap_or(page_title);
+            let name_part = page_title
+                .split(&['|', '-', '—'][..])
+                .next()
+                .unwrap_or(page_title);
             Some(name_part.trim().to_string())
         } else {
             None
@@ -268,7 +273,10 @@ Webpage content:
         let email = page_text
             .split_whitespace()
             .find(|w| w.contains('@') && w.contains('.') && !w.contains("example.com"))
-            .map(|w| w.trim_matches(&['(', ')', '<', '>', ',', ';', '"', '\''][..]).to_string());
+            .map(|w| {
+                w.trim_matches(&['(', ')', '<', '>', ',', ';', '"', '\''][..])
+                    .to_string()
+            });
 
         ExtractedSupplierInfo {
             company_name,
@@ -283,4 +291,3 @@ Webpage content:
         }
     }
 }
-

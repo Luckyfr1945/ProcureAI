@@ -62,7 +62,10 @@ impl RankingService {
 
         if !products.is_empty() {
             product_score += 10.0;
-            notes.push(format!("Catalog lists {} relevant product items", products.len()));
+            notes.push(format!(
+                "Catalog lists {} relevant product items",
+                products.len()
+            ));
         }
 
         product_score = product_score.clamp(0.0, 40.0);
@@ -109,11 +112,17 @@ impl RankingService {
         let mut contact_score: f64 = 0.0;
         if supplier.email.is_some() {
             contact_score += 5.0;
-            notes.push(format!("Direct email found: {}", supplier.email.as_deref().unwrap()));
+            notes.push(format!(
+                "Direct email found: {}",
+                supplier.email.as_deref().unwrap()
+            ));
         }
         if supplier.phone.is_some() {
             contact_score += 5.0;
-            notes.push(format!("Direct phone found: {}", supplier.phone.as_deref().unwrap()));
+            notes.push(format!(
+                "Direct phone found: {}",
+                supplier.phone.as_deref().unwrap()
+            ));
         }
         contact_score = contact_score.clamp(0.0, 10.0);
 
@@ -122,13 +131,17 @@ impl RankingService {
         let products_with_price = products.iter().filter(|p| p.price_amount.is_some()).count();
         if products_with_price > 0 {
             price_score = 15.0;
-            notes.push(format!("Found explicit pricing for {} items", products_with_price));
+            notes.push(format!(
+                "Found explicit pricing for {} items",
+                products_with_price
+            ));
         } else {
             notes.push("Pricing requires inquiry/quote".to_string());
         }
 
-        let total_score = (product_score + location_score + company_score + contact_score + price_score)
-            .clamp(0.0, 100.0);
+        let total_score =
+            (product_score + location_score + company_score + contact_score + price_score)
+                .clamp(0.0, 100.0);
 
         ScoreBreakdown {
             product_match_score: product_score,

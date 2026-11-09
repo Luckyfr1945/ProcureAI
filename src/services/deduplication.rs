@@ -25,4 +25,3 @@ pub fn are_duplicate_suppliers(a: &Supplier, b: &Supplier) -> bool {
     // Conservative: do not merge just because names sound similar!
     false
 }
-

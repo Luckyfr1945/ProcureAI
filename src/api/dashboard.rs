@@ -1,8 +1,8 @@
-use axum::{extract::State, http::StatusCode, Json};
-use serde_json::json;
 use crate::auth::AuthenticatedUser;
 use crate::database::repositories::{searches, suppliers};
 use crate::state::AppState;
+use axum::{Json, extract::State, http::StatusCode};
+use serde_json::json;
 
 pub async fn get_dashboard_stats(
     State(state): State<AppState>,
@@ -32,8 +32,12 @@ pub async fn get_dashboard_stats(
     .await
     .unwrap_or(0);
 
-    let recent_jobs = searches::list_recent_jobs(&state.db, 5).await.unwrap_or_default();
-    let recent_suppliers = suppliers::list_suppliers(&state.db, 5, 0, None, None).await.unwrap_or_default();
+    let recent_jobs = searches::list_recent_jobs(&state.db, 5)
+        .await
+        .unwrap_or_default();
+    let recent_suppliers = suppliers::list_suppliers(&state.db, 5, 0, None, None)
+        .await
+        .unwrap_or_default();
 
     Ok(Json(json!({
         "stats": {
@@ -46,4 +50,3 @@ pub async fn get_dashboard_stats(
         "recent_suppliers": recent_suppliers
     })))
 }
-

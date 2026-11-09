@@ -4,7 +4,7 @@ use procure_ai::database::repositories::{searches, users};
 use procure_ai::models::{SearchPreferences, Supplier, SupplierProduct, UserRole};
 use procure_ai::providers::gemini::GeminiClient;
 use procure_ai::providers::search::{MockSearchProvider, SearchProvider};
-use procure_ai::services::{deduplication, normalization, RankingService};
+use procure_ai::services::{RankingService, deduplication, normalization};
 use procure_ai::utils::text::normalize_company_name;
 use procure_ai::utils::url_safety::{is_private_ip, validate_url_safety};
 use procure_ai::workers::DiscoveryWorker;
@@ -27,10 +27,22 @@ async fn test_url_safety_anti_ssrf() {
     assert!(is_private_ip(&private_192));
 
     // 2. URLs to private / internal resources must be rejected
-    assert!(validate_url_safety("http://127.0.0.1:8080/secret").await.is_err());
+    assert!(
+        validate_url_safety("http://127.0.0.1:8080/secret")
+            .await
+            .is_err()
+    );
     assert!(validate_url_safety("http://localhost:3000/").await.is_err());
-    assert!(validate_url_safety("http://169.254.169.254/latest/meta-data/").await.is_err());
-    assert!(validate_url_safety("ftp://example.com/file.txt").await.is_err());
+    assert!(
+        validate_url_safety("http://169.254.169.254/latest/meta-data/")
+            .await
+            .is_err()
+    );
+    assert!(
+        validate_url_safety("ftp://example.com/file.txt")
+            .await
+            .is_err()
+    );
     assert!(validate_url_safety("file:///etc/passwd").await.is_err());
 }
 
@@ -57,8 +69,14 @@ async fn test_query_expansion_and_search_provider() {
 #[tokio::test]
 async fn test_supplier_normalization_dedup_and_ranking() {
     // Normalization test
-    assert_eq!(normalize_company_name("SKF Bearings Group Inc."), "skf bearings");
-    assert_eq!(normalize_company_name("PT. Mitra Maju Teknik Tbk"), "mitra maju teknik");
+    assert_eq!(
+        normalize_company_name("SKF Bearings Group Inc."),
+        "skf bearings"
+    );
+    assert_eq!(
+        normalize_company_name("PT. Mitra Maju Teknik Tbk"),
+        "mitra maju teknik"
+    );
 
     let s1 = Supplier {
         id: 1,
@@ -109,9 +127,14 @@ async fn test_supplier_normalization_dedup_and_ranking() {
     };
 
     let specs = vec!["SKF".to_string(), "6205".to_string()];
-    let score = RankingService::calculate_score(&s1, &products, "SKF 6205 bearings", &specs, &prefs);
+    let score =
+        RankingService::calculate_score(&s1, &products, "SKF 6205 bearings", &specs, &prefs);
 
-    assert!(score.total_score >= 80.0, "Expected high score, got {}", score.total_score);
+    assert!(
+        score.total_score >= 80.0,
+        "Expected high score, got {}",
+        score.total_score
+    );
     assert!(score.product_match_score > 30.0);
     assert_eq!(score.location_score, 20.0);
     assert_eq!(score.price_score, 15.0);

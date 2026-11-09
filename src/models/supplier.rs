@@ -56,4 +56,3 @@ pub struct UpdateSupplierDto {
     pub description: Option<String>,
     pub verification_status: Option<String>,
 }
-

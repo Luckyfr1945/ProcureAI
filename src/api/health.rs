@@ -1,6 +1,6 @@
-use axum::{extract::State, Json};
-use serde_json::{json, Value};
 use crate::state::AppState;
+use axum::{Json, extract::State};
+use serde_json::{Value, json};
 
 pub async fn health_check(State(state): State<AppState>) -> Json<Value> {
     let db_status = match sqlx::query("SELECT 1").execute(&state.db).await {
@@ -16,4 +16,3 @@ pub async fn health_check(State(state): State<AppState>) -> Json<Value> {
         "environment": state.config.app_env
     }))
 }
-

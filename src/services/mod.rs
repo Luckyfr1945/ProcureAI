@@ -9,4 +9,3 @@ pub use crawler::AsyncCrawler;
 pub use extraction::ExtractionService;
 pub use query_expansion::QueryExpansionService;
 pub use ranking::RankingService;
-

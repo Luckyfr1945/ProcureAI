@@ -1,12 +1,12 @@
-use axum::{
-    extract::{FromRef, FromRequestParts},
-    http::{header, request::Parts, StatusCode},
-    response::{IntoResponse, Response},
-    Json,
-};
-use serde_json::json;
 use crate::auth::session::verify_session_token;
 use crate::state::AppState;
+use axum::{
+    Json,
+    extract::{FromRef, FromRequestParts},
+    http::{StatusCode, header, request::Parts},
+    response::{IntoResponse, Response},
+};
+use serde_json::json;
 
 #[derive(Debug, Clone)]
 pub struct AuthenticatedUser {

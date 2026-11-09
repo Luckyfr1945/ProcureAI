@@ -1,17 +1,17 @@
-use axum::{
-    extract::State,
-    http::{header, HeaderMap, HeaderValue, StatusCode},
-    response::IntoResponse,
-    Json,
-};
-use serde::{Deserialize, Serialize};
-use serde_json::json;
 use crate::auth::middleware::AuthenticatedUser;
 use crate::auth::password::{hash_password, verify_password};
 use crate::auth::session::create_session_token;
 use crate::database::repositories::users;
 use crate::models::{CreateUserDto, UserRole};
 use crate::state::AppState;
+use axum::{
+    Json,
+    extract::State,
+    http::{HeaderMap, HeaderValue, StatusCode, header},
+    response::IntoResponse,
+};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 #[derive(Debug, Deserialize)]
 pub struct LoginDto {
@@ -243,4 +243,3 @@ pub async fn register_user(
         })),
     ))
 }
-

@@ -11,4 +11,3 @@ pub struct SupplierSource {
     pub evidence_json: Option<String>,
     pub extracted_at: String,
 }
-

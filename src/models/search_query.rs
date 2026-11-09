@@ -12,4 +12,3 @@ pub struct SearchQuery {
     pub exhausted: i64,
     pub created_at: String,
 }
-

@@ -1,6 +1,6 @@
+use crate::models::supplier::Supplier;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use crate::models::supplier::Supplier;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct SearchResult {
@@ -32,4 +32,3 @@ pub struct EnrichedSearchResultDto {
     pub supplier: Supplier,
     pub first_seen_at: String,
 }
-

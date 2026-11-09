@@ -16,4 +16,3 @@ pub struct SupplierProduct {
     pub product_url: Option<String>,
     pub price_observed_at: Option<String>,
 }
-

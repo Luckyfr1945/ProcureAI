@@ -17,4 +17,3 @@ impl QueryExpansionService {
         self.gemini.expand_search_query(request, max_queries).await
     }
 }
-

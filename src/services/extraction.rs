@@ -17,8 +17,7 @@ impl ExtractionService {
         &self,
         crawl: &CrawlResult,
     ) -> anyhow::Result<(Supplier, Vec<SupplierProduct>)> {
-        let domain = extract_domain(&crawl.final_url)
-            .unwrap_or_else(|| "unknown.com".to_string());
+        let domain = extract_domain(&crawl.final_url).unwrap_or_else(|| "unknown.com".to_string());
 
         let extracted: ExtractedSupplierInfo = self
             .gemini
@@ -89,4 +88,3 @@ impl ExtractionService {
         Ok((supplier, products))
     }
 }
-

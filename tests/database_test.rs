@@ -68,9 +68,15 @@ async fn test_database_initialization_and_crud() {
     assert_eq!(fetched_supplier.canonical_key, "skf.com");
 
     // 4. Verify search result linkage
-    searches::save_search_result(&pool, job_id, supplier_id, 92.5, Some(r#"{"total_score":92.5}"#))
-        .await
-        .expect("Failed to save search result");
+    searches::save_search_result(
+        &pool,
+        job_id,
+        supplier_id,
+        92.5,
+        Some(r#"{"total_score":92.5}"#),
+    )
+    .await
+    .expect("Failed to save search result");
 
     let results = searches::get_job_results(&pool, job_id)
         .await
@@ -82,4 +88,3 @@ async fn test_database_initialization_and_crud() {
     // Clean up test database
     let _ = tokio::fs::remove_file(test_db_path).await;
 }
-
