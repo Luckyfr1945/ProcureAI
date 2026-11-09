@@ -1,0 +1,27 @@
+# Environment variables
+.env
+*.env.local
+
+# Rust build artifacts
+/target/
+
+# Database files
+/instance/*.db
+/instance/*.db-shm
+/instance/*.db-wal
+
+# Exports
+/exports/*
+!/exports/.gitkeep
+
+# IDE / Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+
+
+# Added by cargo
+
+/target
