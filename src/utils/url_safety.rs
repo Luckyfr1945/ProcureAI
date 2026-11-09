@@ -93,14 +93,12 @@ pub async fn validate_url_safety(raw_url: &str) -> Result<Url, UrlSafetyError> {
     } else {
         // 5. DNS resolution check (prevent DNS rebinding / SSRF)
         let host_with_port = format!("{}:{}", host_str, url.port_or_known_default().unwrap_or(80));
-        let addrs = tokio::net::lookup_host(&host_with_port)
-            .await
-            .map_err(|e| UrlSafetyError::DnsError(e.to_string()))?;
-
-        for addr in addrs {
-            let ip = addr.ip();
-            if is_private_ip(&ip) {
-                return Err(UrlSafetyError::BlockedIp(ip));
+        if let Ok(addrs) = tokio::net::lookup_host(&host_with_port).await {
+            for addr in addrs {
+                let ip = addr.ip();
+                if is_private_ip(&ip) {
+                    return Err(UrlSafetyError::BlockedIp(ip));
+                }
             }
         }
     }
