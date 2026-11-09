@@ -18,6 +18,8 @@ pub async fn init_pool(database_url: &str) -> anyhow::Result<SqlitePool> {
 
     let options = SqliteConnectOptions::from_str(database_url)?
         .create_if_missing(true)
+        .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+        .busy_timeout(std::time::Duration::from_secs(5))
         .foreign_keys(true);
 
     let pool = SqlitePoolOptions::new()
