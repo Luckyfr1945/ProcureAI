@@ -204,7 +204,31 @@ impl DiscoveryWorker {
                         }
 
                         // Crawl page
-                        match self.crawler.fetch_page(&norm_url).await {
+                        let crawl_attempt = self.crawler.fetch_page(&norm_url).await;
+                        let crawl_result = match crawl_attempt {
+                            Ok(res) => Ok(res),
+                            Err(e) => {
+                                if self.search_provider.provider_name() == "mock" {
+                                    let clean_domain = domain.clone();
+                                    let synthetic = crate::services::crawler::CrawlResult {
+                                        original_url: item.url.clone(),
+                                        final_url: norm_url.clone(),
+                                        http_status: 200,
+                                        page_title: item.title.clone(),
+                                        meta_description: Some(item.snippet.clone()),
+                                        clean_text: format!("{} {}. Melayani pengadaan grosir dan tender.", item.title, item.snippet),
+                                        emails: vec![format!("sales@{}", clean_domain)],
+                                        phones: vec!["+62 21 555 0199".to_string()],
+                                        content_hash: "mock_content_hash".to_string(),
+                                    };
+                                    Ok(synthetic)
+                                } else {
+                                    Err(e)
+                                }
+                            }
+                        };
+
+                        match crawl_result {
                             Ok(crawl_result) => {
                                 total_processed_urls += 1;
                                 searches::update_crawl_page_status(

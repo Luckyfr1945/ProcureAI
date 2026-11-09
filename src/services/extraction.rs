@@ -41,6 +41,21 @@ impl ExtractionService {
             email = Some(crawl.emails[0].clone());
         }
 
+        // Extra guard: never permit code, CSS, or JSON-LD as email
+        if let Some(ref em) = email {
+            if em.contains('{')
+                || em.contains('}')
+                || em.contains('\\')
+                || em.contains('"')
+                || em.contains("@type")
+                || em.contains("@media")
+                || em.contains(';')
+                || em.contains(':')
+            {
+                email = None;
+            }
+        }
+
         // Phone from Gemini or HTML parser
         let mut phone = extracted.phone;
         if phone.is_none() && !crawl.phones.is_empty() {

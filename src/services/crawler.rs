@@ -1,9 +1,9 @@
-use crate::utils::text::{calculate_content_hash, clean_text};
-use crate::utils::url_safety::validate_url_safety;
-use reqwest::Client;
 use reqwest::header::CONTENT_TYPE;
+use reqwest::Client;
 use scraper::{Html, Selector};
 use std::time::Duration;
+use crate::utils::text::{calculate_content_hash, clean_text, extract_valid_emails};
+use crate::utils::url_safety::validate_url_safety;
 
 #[derive(Debug, Clone)]
 pub struct CrawlResult {
@@ -64,11 +64,7 @@ impl AsyncCrawler {
         }
 
         // 4. Validate content-type is text/html
-        if let Some(ct) = resp
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|v| v.to_str().ok())
-        {
+        if let Some(ct) = resp.headers().get(CONTENT_TYPE).and_then(|v| v.to_str().ok()) {
             let ct_lower = ct.to_lowercase();
             if !ct_lower.contains("text/html") && !ct_lower.contains("application/xhtml") {
                 return Err(anyhow::anyhow!("Skipping non-HTML content-type: {}", ct));
@@ -110,18 +106,35 @@ impl AsyncCrawler {
             .and_then(|el| el.value().attr("content"))
             .map(|s| clean_text(s));
 
-        // Extract body text, skipping scripts/styles
+        // Extract body text while strictly excluding <script>, <style>, <noscript>, <svg>
         let body_selector = Selector::parse("body").unwrap();
-        let body_text = if let Some(body_el) = document.select(&body_selector).next() {
-            body_el
-                .text()
-                .filter(|t| !t.trim().is_empty())
-                .collect::<Vec<_>>()
-                .join(" ")
-        } else {
-            document.root_element().text().collect::<Vec<_>>().join(" ")
-        };
-        let cleaned_text = clean_text(&body_text);
+        let mut text_parts = Vec::new();
+        if let Some(body_el) = document.select(&body_selector).next() {
+            for node in body_el.descendants() {
+                if let Some(text) = node.value().as_text() {
+                    let has_script_or_style = node.ancestors().any(|anc| {
+                        if let Some(el) = anc.value().as_element() {
+                            let name = el.name();
+                            name == "script"
+                                || name == "style"
+                                || name == "noscript"
+                                || name == "svg"
+                                || name == "head"
+                        } else {
+                            false
+                        }
+                    });
+
+                    if !has_script_or_style {
+                        let trimmed = text.trim();
+                        if !trimmed.is_empty() {
+                            text_parts.push(trimmed);
+                        }
+                    }
+                }
+            }
+        }
+        let cleaned_text = text_parts.join(" ");
 
         // Extract mailto: and tel: links
         let link_selector = Selector::parse("a[href]").unwrap();
@@ -137,15 +150,29 @@ impl AsyncCrawler {
                         .unwrap_or(email)
                         .trim()
                         .to_lowercase();
-                    if clean_email.contains('@') && !emails.contains(&clean_email) {
-                        emails.push(clean_email);
+                    for valid in extract_valid_emails(&clean_email) {
+                        if !emails.contains(&valid) {
+                            emails.push(valid);
+                        }
                     }
                 } else if let Some(phone) = href.strip_prefix("tel:") {
-                    let clean_phone = phone.trim().to_string();
-                    if !clean_phone.is_empty() && !phones.contains(&clean_phone) {
+                    let clean_phone = phone
+                        .chars()
+                        .filter(|c| c.is_numeric() || *c == '+' || *c == '-' || *c == ' ')
+                        .collect::<String>()
+                        .trim()
+                        .to_string();
+                    if clean_phone.len() >= 6 && !phones.contains(&clean_phone) {
                         phones.push(clean_phone);
                     }
                 }
+            }
+        }
+
+        // Also scan body text for valid email addresses
+        for email in extract_valid_emails(&cleaned_text) {
+            if !emails.contains(&email) {
+                emails.push(email);
             }
         }
 

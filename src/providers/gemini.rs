@@ -1,6 +1,8 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use crate::utils::text::extract_valid_emails;
+use crate::utils::url_safety::extract_domain;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExpandedQueryOutput {
@@ -101,16 +103,17 @@ User request: "{}"
             }
         });
 
-        let resp = self.client.post(&url).json(&req_body).send().await?;
+        let resp = self
+            .client
+            .post(&url)
+            .json(&req_body)
+            .send()
+            .await?;
 
         if !resp.status().is_success() {
             let status = resp.status();
             let err_text = resp.text().await.unwrap_or_default();
-            tracing::warn!(
-                "Gemini API error ({}): {}, falling back to heuristic query expansion",
-                status,
-                err_text
-            );
+            tracing::warn!("Gemini API error ({}): {}, falling back to heuristic query expansion", status, err_text);
             return Ok(self.fallback_query_expansion(request, max_queries));
         }
 
@@ -140,10 +143,7 @@ User request: "{}"
         // Extract key terms that look like models or capitalized specs
         let mut important_specs: Vec<String> = words
             .iter()
-            .filter(|w| {
-                w.chars().any(|c| c.is_numeric())
-                    || w.len() > 2 && w.chars().all(|c| c.is_uppercase())
-            })
+            .filter(|w| w.chars().any(|c| c.is_numeric()) || (w.len() > 2 && w.chars().all(|c| c.is_uppercase())))
             .map(|w| w.to_string())
             .collect();
 
@@ -258,25 +258,39 @@ Webpage content:
         page_title: &str,
         page_text: &str,
     ) -> ExtractedSupplierInfo {
-        // Fallback rule-based extractor
-        let company_name = if !page_title.is_empty() {
-            let name_part = page_title
-                .split(&['|', '-', '—'][..])
-                .next()
-                .unwrap_or(page_title);
-            Some(name_part.trim().to_string())
-        } else {
-            None
-        };
+        let domain = extract_domain(page_url).unwrap_or_default();
 
-        // Extract email if present
-        let email = page_text
-            .split_whitespace()
-            .find(|w| w.contains('@') && w.contains('.') && !w.contains("example.com"))
-            .map(|w| {
-                w.trim_matches(&['(', ')', '<', '>', ',', ';', '"', '\''][..])
-                    .to_string()
-            });
+        let mut company_name = None;
+        if !page_title.is_empty() {
+            let parts: Vec<&str> = page_title.split(&['|', '-', '—', '•', ':'][..]).collect();
+            // Look for part that resembles a brand/company
+            for part in parts.iter().rev() {
+                let p = part.trim();
+                let p_lower = p.to_lowercase();
+                if !p.is_empty()
+                    && p.len() < 50
+                    && !p_lower.contains("home")
+                    && !p_lower.contains("official")
+                    && !p_lower.contains("welcome")
+                    && !p_lower.contains("solutions")
+                    && !p_lower.contains("products")
+                {
+                    company_name = Some(p.to_string());
+                    break;
+                }
+            }
+            if company_name.is_none() && !parts.is_empty() {
+                company_name = Some(parts[0].trim().to_string());
+            }
+        }
+
+        if company_name.is_none() && !domain.is_empty() {
+            let brand = domain.split('.').next().unwrap_or(&domain);
+            company_name = Some(brand.to_uppercase());
+        }
+
+        let emails = extract_valid_emails(page_text);
+        let email = emails.into_iter().next();
 
         ExtractedSupplierInfo {
             company_name,
