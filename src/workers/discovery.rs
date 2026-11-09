@@ -68,17 +68,20 @@ impl DiscoveryWorker {
     }
 
     async fn find_next_queued_job(&self) -> anyhow::Result<Option<SearchJob>> {
+        let now = chrono::Utc::now().to_rfc3339();
         let job = sqlx::query_as::<_, SearchJob>(
             r#"
-            SELECT id, user_id, original_request, status, options_json, stop_requested,
-                   round_count, discovered_url_count, processed_url_count, error_message,
-                   created_at, started_at, finished_at
-            FROM search_jobs
-            WHERE status = 'queued'
-            ORDER BY id ASC
-            LIMIT 1
+            UPDATE search_jobs
+            SET status = 'running', started_at = $1
+            WHERE id = (
+                SELECT id FROM search_jobs WHERE status = 'queued' ORDER BY id ASC LIMIT 1
+            )
+            RETURNING id, user_id, original_request, status, options_json, stop_requested,
+                      round_count, discovered_url_count, processed_url_count, error_message,
+                      created_at, started_at, finished_at
             "#,
         )
+        .bind(now)
         .fetch_optional(&self.db)
         .await?;
 

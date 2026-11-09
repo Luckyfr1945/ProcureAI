@@ -263,24 +263,31 @@ Webpage content:
         let mut company_name = None;
         if !page_title.is_empty() {
             let parts: Vec<&str> = page_title.split(&['|', '-', '—', '•', ':'][..]).collect();
-            // Look for part that resembles a brand/company
-            for part in parts.iter().rev() {
+            // Check if any part has corporate keywords
+            for part in &parts {
                 let p = part.trim();
                 let p_lower = p.to_lowercase();
-                if !p.is_empty()
-                    && p.len() < 50
-                    && !p_lower.contains("home")
-                    && !p_lower.contains("official")
-                    && !p_lower.contains("welcome")
-                    && !p_lower.contains("solutions")
-                    && !p_lower.contains("products")
+                if p_lower.starts_with("pt ")
+                    || p_lower.starts_with("cv ")
+                    || p_lower.contains("ltd")
+                    || p_lower.contains("inc")
+                    || p_lower.contains("corp")
+                    || p_lower.contains("company")
+                    || p_lower.contains("group")
+                    || p_lower.contains("industr")
+                    || p_lower.contains("solusindo")
                 {
                     company_name = Some(p.to_string());
                     break;
                 }
             }
+
+            // Fallback to the first descriptive part
             if company_name.is_none() && !parts.is_empty() {
-                company_name = Some(parts[0].trim().to_string());
+                let first = parts[0].trim();
+                if !first.is_empty() {
+                    company_name = Some(first.to_string());
+                }
             }
         }
 
@@ -292,10 +299,27 @@ Webpage content:
         let emails = extract_valid_emails(page_text);
         let email = emails.into_iter().next();
 
+        let mut country = None;
+        if domain.ends_with(".id") || domain.ends_with(".co.id") {
+            country = Some("Indonesia".to_string());
+        } else if domain.ends_with(".de") {
+            country = Some("Germany".to_string());
+        } else if domain.ends_with(".se") {
+            country = Some("Sweden".to_string());
+        } else if domain.ends_with(".jp") {
+            country = Some("Japan".to_string());
+        } else if domain.ends_with(".sg") {
+            country = Some("Singapore".to_string());
+        } else if domain.ends_with(".cn") {
+            country = Some("China".to_string());
+        } else if domain.ends_with(".uk") || domain.ends_with(".co.uk") {
+            country = Some("United Kingdom".to_string());
+        }
+
         ExtractedSupplierInfo {
             company_name,
             website: Some(page_url.to_string()),
-            country: None,
+            country,
             city: None,
             email,
             phone: None,
