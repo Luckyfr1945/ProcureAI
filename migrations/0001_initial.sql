@@ -124,3 +124,4 @@ CREATE INDEX idx_suppliers_name ON suppliers(normalized_name);
 CREATE INDEX idx_suppliers_country ON suppliers(country);
 CREATE INDEX idx_results_job_score ON search_results(job_id, relevance_score DESC);
 CREATE INDEX idx_products_supplier ON supplier_products(supplier_id);
+
