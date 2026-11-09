@@ -244,3 +244,4 @@ pub async fn list_recent_searches(
 
     Ok(Json(jobs))
 }
+

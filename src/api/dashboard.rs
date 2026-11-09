@@ -46,3 +46,4 @@ pub async fn get_dashboard_stats(
         "recent_suppliers": recent_suppliers
     })))
 }
+

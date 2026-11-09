@@ -138,3 +138,4 @@ async fn test_auth_protection_and_login() {
     // Clean up
     let _ = tokio::fs::remove_file(test_db_path).await;
 }
+

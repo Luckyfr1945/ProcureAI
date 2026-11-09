@@ -82,3 +82,4 @@ async fn test_database_initialization_and_crud() {
     // Clean up test database
     let _ = tokio::fs::remove_file(test_db_path).await;
 }
+

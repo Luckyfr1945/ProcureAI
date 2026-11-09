@@ -75,3 +75,4 @@ pub fn verify_session_token(token: &str, secret: &str) -> anyhow::Result<Session
 
     Ok(claims)
 }
+
