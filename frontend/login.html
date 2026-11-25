@@ -3,57 +3,96 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login - ProcureAI</title>
+  <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16181c" media="(prefers-color-scheme: dark)">
+  <title>Masuk – ProcureAI</title>
+  <script>
+    (function(){try{var t=localStorage.getItem('procure_theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+  </script>
   <link rel="stylesheet" href="/css/style.css">
-  <style>
-    .login-wrapper {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      padding: 1rem;
-    }
-    .login-card {
-      max-width: 420px;
-      width: 100%;
-    }
-  </style>
 </head>
 <body>
-  <div class="login-wrapper">
-    <div class="card login-card">
-      <div style="text-align: center; margin-bottom: 2rem;">
-        <h1 style="font-size: 1.8rem; margin-bottom: 0.5rem;">ProcureAI</h1>
-        <p style="color: var(--text-muted); font-size: 0.9rem;">AI-powered Supplier Discovery & Procurement Intelligence</p>
+  <a class="skip-link" href="#main-content">Lewati ke konten utama</a>
+  <div class="login-shell">
+    <div class="login-theme-corner">
+      <button type="button" class="theme-toggle" data-theme-toggle aria-label="Ganti tema tampilan">
+        <svg data-icon-sun aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+        <svg data-icon-moon aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        <span data-theme-label>Mode Gelap</span>
+      </button>
+    </div>
+
+    <div class="brand" translate="no">ProcureAI <span class="brand-sub">Purchasing</span></div>
+
+    <main class="login-card" id="main-content">
+      <div class="login-header">
+        <h1 class="login-title">Masuk</h1>
+        <p class="login-subtitle">Gunakan akun internal tim Purchasing.</p>
       </div>
 
-      <div id="login-error" style="display: none; background: rgba(239,68,68,0.2); color: #f87171; padding: 0.75rem; border-radius: var(--radius); margin-bottom: 1rem; font-size: 0.85rem;"></div>
+      <div id="login-error" class="alert-banner danger" style="display: none;" role="alert">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span id="login-error-text"></span>
+      </div>
 
       <form id="login-form">
         <div class="form-group">
           <label for="username">Username</label>
-          <input type="text" id="username" placeholder="Masukkan username" required autocomplete="username">
+          <input type="text" id="username" name="username" required autocomplete="username" spellcheck="false" autocapitalize="none">
         </div>
+
         <div class="form-group">
           <label for="password">Password</label>
-          <input type="password" id="password" placeholder="Masukkan password" required autocomplete="current-password">
+          <div class="input-with-toggle">
+            <input type="password" id="password" name="password" required autocomplete="current-password">
+            <button type="button" class="password-toggle-btn" id="toggle-password-btn" aria-label="Tampilkan password">
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
         </div>
-        <button type="submit" class="btn" style="width: 100%; justify-content: center;" id="login-submit-btn">Masuk ke Sistem</button>
+
+        <button type="submit" class="btn" id="login-submit-btn">Masuk</button>
       </form>
 
-      <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--text-muted); text-align: center;">
-        Akses khusus tim Purchasing internal.<br>
-        Akun default: <code>admin</code> / <code>AdminProcureAI2026!</code>
+      <div class="login-demo-box">
+        <div>
+          <div class="login-demo-title">Akun bawaan</div>
+          <div class="login-demo-cred mono" translate="no">admin / AdminProcureAI2026!</div>
+        </div>
+        <button type="button" class="btn btn-secondary btn-xs" id="fill-demo-btn">Isi otomatis</button>
       </div>
-    </div>
+    </main>
   </div>
 
   <script src="/js/app.js"></script>
   <script>
-    // Quick autofill if empty
+    document.addEventListener('DOMContentLoaded', () => {
+      initShell();
+
+      const pwInput = document.getElementById('password');
+      const pwToggle = document.getElementById('toggle-password-btn');
+      if (pwToggle && pwInput) {
+        pwToggle.addEventListener('click', () => {
+          const isPw = pwInput.type === 'password';
+          pwInput.type = isPw ? 'text' : 'password';
+          pwToggle.setAttribute('aria-label', isPw ? 'Sembunyikan password' : 'Tampilkan password');
+        });
+      }
+
+      const fillBtn = document.getElementById('fill-demo-btn');
+      if (fillBtn) {
+        fillBtn.addEventListener('click', () => {
+          document.getElementById('username').value = 'admin';
+          document.getElementById('password').value = 'AdminProcureAI2026!';
+          document.getElementById('login-submit-btn').focus();
+        });
+      }
+    });
+
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const errBox = document.getElementById('login-error');
+      const errText = document.getElementById('login-error-text');
       errBox.style.display = 'none';
 
       const username = document.getElementById('username').value.trim();
@@ -62,9 +101,9 @@
 
       try {
         btn.disabled = true;
-        btn.textContent = 'Memverifikasi...';
+        btn.innerHTML = `<svg class="spin" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Memeriksa…`;
 
-        const res = await API.request('/api/auth/login', {
+        const res = await API.request('/api/v1/auth/login', {
           method: 'POST',
           body: JSON.stringify({ username, password })
         });
@@ -73,14 +112,13 @@
         API.setUser(res.user);
         window.location.href = '/index.html';
       } catch (err) {
-        errBox.textContent = err.message;
-        errBox.style.display = 'block';
+        errText.textContent = `${err.message}. Periksa username dan password, lalu coba lagi.`;
+        errBox.style.display = 'flex';
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Masuk ke Sistem';
+        btn.textContent = 'Masuk';
       }
     });
   </script>
 </body>
 </html>
-

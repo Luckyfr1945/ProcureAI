@@ -11,6 +11,8 @@ pub struct SessionClaims {
     pub username: String,
     pub role: String,
     pub exp: i64,
+    #[serde(default)]
+    pub jti: Option<String>,
 }
 
 pub fn create_session_token(
@@ -26,6 +28,7 @@ pub fn create_session_token(
         username: username.to_string(),
         role: role.to_string(),
         exp,
+        jti: Some(uuid::Uuid::new_v4().to_string()),
     };
 
     let payload_bytes = serde_json::to_vec(&claims)?;

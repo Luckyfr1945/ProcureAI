@@ -43,7 +43,8 @@ pub fn is_private_ip(ip: &IpAddr) -> bool {
                 || (octets[0] == 100 && (octets[1] & 0xc0) == 64)
         }
         IpAddr::V6(ipv6) => {
-            ipv6.is_loopback()
+            ipv6.to_ipv4_mapped().is_some_and(|v4| is_private_ip(&IpAddr::V4(v4)))
+                || ipv6.is_loopback()
                 || ipv6.is_unspecified()
                 || ipv6.is_multicast()
                 // Unique Local Address fc00::/7
@@ -86,20 +87,19 @@ pub async fn validate_url_safety(raw_url: &str) -> Result<Url, UrlSafetyError> {
     }
 
     // 4. Check if direct IP address
-    if let Ok(ip) = host_str.parse::<IpAddr>() {
+    if let Ok(ip) = host_str.trim_matches(&['[', ']'][..]).parse::<IpAddr>() {
         if is_private_ip(&ip) {
             return Err(UrlSafetyError::BlockedIp(ip));
         }
     } else {
         // 5. DNS resolution check (prevent DNS rebinding / SSRF)
         let host_with_port = format!("{}:{}", host_str, url.port_or_known_default().unwrap_or(80));
-        if let Ok(addrs) = tokio::net::lookup_host(&host_with_port).await {
-            for addr in addrs {
+        let addrs = tokio::net::lookup_host(&host_with_port).await.map_err(|e| UrlSafetyError::DnsError(e.to_string()))?;
+        for addr in addrs {
                 let ip = addr.ip();
                 if is_private_ip(&ip) {
                     return Err(UrlSafetyError::BlockedIp(ip));
                 }
-            }
         }
     }
 

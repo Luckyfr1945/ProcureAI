@@ -6,6 +6,80 @@ static EMAIL_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,10}\b").unwrap()
 });
 
+static WA_URL_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)(?:wa\.me/|api\.whatsapp\.com/send\?(?:[^#\s]*&)?phone=)\+?(\d{8,15})").unwrap()
+});
+
+static ID_MOBILE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)(?:\+62|0)[\s.-]?8[1-9][0-9]{1,2}[\s.-]?[0-9]{3,4}[\s.-]?[0-9]{2,5}\b").unwrap()
+});
+
+static LABELED_PHONE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?i)(?:telp?|telepon|phone|hp|wa|whatsapp|hotline|call|kontak|contact)\s*[:.]?\s*(\+?\(?\d[\d\s().-]{7,18}\d)",
+    )
+    .unwrap()
+});
+
+pub fn extract_whatsapp_from_href(href: &str) -> Option<String> {
+    WA_URL_REGEX.captures(href).and_then(|caps| {
+        caps.get(1).map(|m| {
+            let digits = m.as_str();
+            if digits.starts_with('0') && digits.len() >= 10 {
+                format!("+62{}", &digits[1..])
+            } else {
+                format!("+{}", digits)
+            }
+        })
+    })
+}
+
+pub fn extract_phones_and_whatsapp(text: &str) -> Vec<String> {
+    let mut results: Vec<String> = Vec::new();
+    let mut seen_digits: Vec<String> = Vec::new();
+
+    let mut push_phone = |raw: &str| {
+        let trimmed = raw.trim();
+        let digits: String = trimmed.chars().filter(|c| c.is_ascii_digit()).collect();
+        if digits.len() < 8 || digits.len() > 15 {
+            return;
+        }
+        // Reject obvious non-phone sequences (repeated digits like 00000000)
+        if digits.chars().all(|c| c == digits.chars().next().unwrap_or('0')) {
+            return;
+        }
+        let norm_digits = if digits.starts_with("62") {
+            digits.clone()
+        } else if digits.starts_with('0') && digits.len() >= 10 {
+            format!("62{}", &digits[1..])
+        } else {
+            digits.clone()
+        };
+        if !seen_digits.contains(&norm_digits) {
+            seen_digits.push(norm_digits);
+            results.push(trimmed.to_string());
+        }
+    };
+
+    for caps in WA_URL_REGEX.captures_iter(text) {
+        if let Some(m) = caps.get(1) {
+            push_phone(&format!("+{}", m.as_str()));
+        }
+    }
+
+    for mat in ID_MOBILE_REGEX.find_iter(text) {
+        push_phone(mat.as_str());
+    }
+
+    for caps in LABELED_PHONE_REGEX.captures_iter(text) {
+        if let Some(m) = caps.get(1) {
+            push_phone(m.as_str());
+        }
+    }
+
+    results
+}
+
 pub fn extract_valid_emails(text: &str) -> Vec<String> {
     let mut emails = Vec::new();
     for mat in EMAIL_REGEX.find_iter(text) {

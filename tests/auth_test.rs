@@ -8,7 +8,7 @@ use procure_ai::state::AppState;
 use tower::ServiceExt;
 
 #[tokio::test]
-async fn test_auth_protection_and_login() {
+async fn test_auth_protection_and_login_v2() {
     let test_db_path = "instance/test_auth.db";
     let _ = tokio::fs::remove_file(test_db_path).await;
 
@@ -23,12 +23,12 @@ async fn test_auth_protection_and_login() {
     let state = AppState::new(config, pool);
     let app = app_router(state);
 
-    // 1. Unauthenticated request to /api/suppliers should be 401 Unauthorized
+    // 1. Unauthenticated request to /api/v1/suppliers should be 401 Unauthorized
     let response = app
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/suppliers")
+                .uri("/api/v1/suppliers")
                 .method("GET")
                 .body(Body::empty())
                 .unwrap(),
@@ -38,15 +38,15 @@ async fn test_auth_protection_and_login() {
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
-    // 2. Unauthenticated request to /api/search should be 401 Unauthorized
+    // 2. Unauthenticated request to /api/v1/search-jobs should be 401 Unauthorized
     let response = app
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/search")
+                .uri("/api/v1/search-jobs")
                 .method("POST")
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(r#"{"request": "test bearings"}"#))
+                .body(Body::from(r#"{"input_text": "test bearings SKF 6205"}"#))
                 .unwrap(),
         )
         .await
@@ -64,7 +64,7 @@ async fn test_auth_protection_and_login() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/auth/login")
+                .uri("/api/v1/auth/login")
                 .method("POST")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(serde_json::to_vec(&login_body).unwrap()))
@@ -82,12 +82,12 @@ async fn test_auth_protection_and_login() {
         .expect("Token should be in login response")
         .to_string();
 
-    // 4. Authenticated request to /api/auth/me
+    // 4. Authenticated request to /api/v1/auth/me
     let response = app
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/auth/me")
+                .uri("/api/v1/auth/me")
                 .method("GET")
                 .header(header::AUTHORIZATION, format!("Bearer {}", token))
                 .body(Body::empty())
@@ -102,12 +102,12 @@ async fn test_auth_protection_and_login() {
     assert_eq!(me_json["user"]["username"], "admin");
     assert_eq!(me_json["user"]["role"], "admin");
 
-    // 5. Authenticated request to /api/suppliers
+    // 5. Authenticated request to /api/v1/suppliers
     let response = app
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/suppliers")
+                .uri("/api/v1/suppliers")
                 .method("GET")
                 .header(header::AUTHORIZATION, format!("Bearer {}", token))
                 .body(Body::empty())
@@ -118,22 +118,26 @@ async fn test_auth_protection_and_login() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    // 6. Authenticated request to create search job
+    // 6. Authenticated request to create search job via POST /api/v1/search-jobs
     let response = app
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/search")
+                .uri("/api/v1/search-jobs")
                 .method("POST")
                 .header(header::AUTHORIZATION, format!("Bearer {}", token))
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(r#"{"request": "SKF 6205 bearing supplier"}"#))
+                .body(Body::from(r#"{"input_text": "SKF 6205 bearing supplier", "target_regions": ["Indonesia"]}"#))
                 .unwrap(),
         )
         .await
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::ACCEPTED);
+    let body_bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let job_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+    assert!(job_json["job_id"].as_str().unwrap().len() > 20); // UUID
+    assert_eq!(job_json["current_stage"], "understand");
 
     // Clean up
     let _ = tokio::fs::remove_file(test_db_path).await;

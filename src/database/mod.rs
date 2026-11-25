@@ -41,6 +41,13 @@ pub async fn init_pool(database_url: &str) -> anyhow::Result<SqlitePool> {
 pub async fn seed_initial_admin_if_needed(pool: &SqlitePool) -> anyhow::Result<()> {
     let count = repositories::users::count_users(pool).await?;
     if count == 0 {
+        if std::env::var("APP_ENV").as_deref() == Ok("production") {
+            anyhow::ensure!(
+                std::env::var("DEFAULT_ADMIN_PASSWORD")
+                    .is_ok_and(|p| p.len() >= 12 && p != "AdminProcureAI2026!"),
+                "Set a unique DEFAULT_ADMIN_PASSWORD of at least 12 characters before production bootstrap"
+            );
+        }
         let admin_password = std::env::var("DEFAULT_ADMIN_PASSWORD")
             .unwrap_or_else(|_| "AdminProcureAI2026!".to_string());
         let hash = crate::auth::password::hash_password(&admin_password)?;

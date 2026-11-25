@@ -68,11 +68,35 @@ where
         };
 
         match verify_session_token(&token, secret) {
-            Ok(claims) => Ok(AuthenticatedUser {
-                user_id: claims.user_id,
-                username: claims.username,
-                role: claims.role,
-            }),
+            Ok(claims) => {
+                let user = crate::database::repositories::users::get_user_by_id(
+                    &app_state.db,
+                    claims.user_id,
+                )
+                .await
+                .map_err(|_| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Authentication database unavailable",
+                    )
+                        .into_response()
+                })?;
+                let revoked: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM revoked_sessions WHERE token_hash = ? AND expires_at >= unixepoch()")
+                    .bind(token_hash(&token)).fetch_one(&app_state.db).await
+                    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Authentication database unavailable").into_response())?;
+                match user {
+                    Some(u) if u.is_active == 1 && revoked == 0 => Ok(AuthenticatedUser {
+                        user_id: u.id,
+                        username: u.username,
+                        role: u.role,
+                    }),
+                    _ => Err((
+                        StatusCode::UNAUTHORIZED,
+                        "Session expired or account disabled",
+                    )
+                        .into_response()),
+                }
+            }
             Err(e) => Err((
                 StatusCode::UNAUTHORIZED,
                 Json(json!({
@@ -112,4 +136,25 @@ where
         }
         Ok(RequireAdmin(user))
     }
+}
+
+pub fn token_hash(token: &str) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(token.as_bytes()))
+}
+pub fn request_token(headers: &axum::http::HeaderMap) -> Option<String> {
+    headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|s| s.trim().to_string())
+        .or_else(|| {
+            headers
+                .get(header::COOKIE)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| {
+                    s.split(';')
+                        .find_map(|c| c.trim().strip_prefix("session=").map(str::to_owned))
+                })
+        })
 }

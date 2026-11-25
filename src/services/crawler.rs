@@ -1,9 +1,12 @@
-use reqwest::header::CONTENT_TYPE;
+use crate::utils::text::{
+    calculate_content_hash, clean_text, extract_phones_and_whatsapp, extract_valid_emails,
+    extract_whatsapp_from_href,
+};
+use crate::utils::url_safety::validate_url_safety;
 use reqwest::Client;
+use reqwest::header::CONTENT_TYPE;
 use scraper::{Html, Selector};
 use std::time::Duration;
-use crate::utils::text::{calculate_content_hash, clean_text, extract_valid_emails};
-use crate::utils::url_safety::validate_url_safety;
 
 #[derive(Debug, Clone)]
 pub struct CrawlResult {
@@ -11,6 +14,7 @@ pub struct CrawlResult {
     pub final_url: String,
     pub http_status: u16,
     pub page_title: String,
+    pub site_name: Option<String>,
     pub meta_description: Option<String>,
     pub clean_text: String,
     pub emails: Vec<String>,
@@ -20,65 +24,87 @@ pub struct CrawlResult {
 
 #[derive(Clone)]
 pub struct AsyncCrawler {
-    client: Client,
+    timeout_seconds: u64,
     max_response_bytes: usize,
 }
 
 impl AsyncCrawler {
     pub fn new(timeout_seconds: u64, max_response_bytes: usize) -> Self {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(timeout_seconds))
-            .user_agent("ProcureAI-Discovery/1.0 (Procurement Research Bot; polite; +https://internal.company/procureai)")
-            .redirect(reqwest::redirect::Policy::custom(|attempt| {
-                if attempt.previous().len() >= 5 {
-                    attempt.error("Too many redirects")
-                } else {
-                    attempt.follow()
-                }
-            }))
-            .build()
-            .expect("Failed to build crawler HTTP client");
-
         Self {
-            client,
+            timeout_seconds,
             max_response_bytes,
         }
     }
 
     pub async fn fetch_page(&self, target_url: &str) -> anyhow::Result<CrawlResult> {
-        // 1. SSRF prevention check
-        let safe_url = validate_url_safety(target_url).await?;
-
-        // 2. Perform HTTP GET
-        let resp = self.client.get(safe_url.as_str()).send().await?;
+        let deadline =
+            tokio::time::Instant::now() + Duration::from_secs(self.timeout_seconds.max(1));
+        let mut current = target_url.to_string();
+        let mut response = None;
+        for _ in 0..=5 {
+            let safe_url =
+                tokio::time::timeout_at(deadline, validate_url_safety(&current)).await??;
+            let host = safe_url
+                .host_str()
+                .ok_or_else(|| anyhow::anyhow!("Missing host"))?
+                .trim_matches(&['[', ']'][..]);
+            // Resolve, validate and pin the exact addresses used by this hop; disable proxies.
+            let addresses: Vec<std::net::SocketAddr> = tokio::time::timeout_at(
+                deadline,
+                tokio::net::lookup_host((host, safe_url.port_or_known_default().unwrap_or(80))),
+            )
+            .await??
+            .collect();
+            anyhow::ensure!(
+                !addresses.is_empty()
+                    && addresses
+                        .iter()
+                        .all(|a| !crate::utils::url_safety::is_private_ip(&a.ip())),
+                "Blocked destination address"
+            );
+            let client = Client::builder()
+                .timeout(Duration::from_secs(self.timeout_seconds.max(1)))
+                .redirect(reqwest::redirect::Policy::none())
+                .no_proxy()
+                .user_agent("ProcureAI-Discovery/1.0")
+                .resolve_to_addrs(host, &addresses)
+                .build()?;
+            let resp =
+                tokio::time::timeout_at(deadline, client.get(safe_url.clone()).send()).await??;
+            if resp.status().is_redirection() {
+                let location = resp
+                    .headers()
+                    .get(reqwest::header::LOCATION)
+                    .ok_or_else(|| anyhow::anyhow!("Missing redirect location"))?
+                    .to_str()?;
+                current = safe_url.join(location)?.to_string();
+                continue;
+            }
+            response = Some(resp);
+            break;
+        }
+        let mut resp = response.ok_or_else(|| anyhow::anyhow!("Too many redirects"))?;
         let status = resp.status();
         let final_url = resp.url().to_string();
-
-        // 3. Check for SSRF on final redirected URL as well
-        if final_url != target_url {
-            let _ = validate_url_safety(&final_url).await?;
+        anyhow::ensure!(status.is_success(), "HTTP error status: {}", status);
+        if let Some(ct) = resp
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+        {
+            let lower = ct.to_lowercase();
+            anyhow::ensure!(
+                lower.contains("text/html") || lower.contains("application/xhtml"),
+                "Skipping non-HTML content-type"
+            );
         }
-
-        if !status.is_success() {
-            return Err(anyhow::anyhow!("HTTP error status: {}", status));
-        }
-
-        // 4. Validate content-type is text/html
-        if let Some(ct) = resp.headers().get(CONTENT_TYPE).and_then(|v| v.to_str().ok()) {
-            let ct_lower = ct.to_lowercase();
-            if !ct_lower.contains("text/html") && !ct_lower.contains("application/xhtml") {
-                return Err(anyhow::anyhow!("Skipping non-HTML content-type: {}", ct));
-            }
-        }
-
-        // 5. Read response body bounded by max_bytes
-        let bytes = resp.bytes().await?;
-        if bytes.len() > self.max_response_bytes {
-            return Err(anyhow::anyhow!(
-                "Response size {} exceeds limit of {} bytes",
-                bytes.len(),
-                self.max_response_bytes
-            ));
+        let mut bytes = Vec::new();
+        while let Some(chunk) = tokio::time::timeout_at(deadline, resp.chunk()).await?? {
+            anyhow::ensure!(
+                bytes.len().saturating_add(chunk.len()) <= self.max_response_bytes,
+                "Response exceeds byte limit"
+            );
+            bytes.extend_from_slice(&chunk);
         }
 
         let html_str = String::from_utf8_lossy(&bytes).to_string();
@@ -96,7 +122,7 @@ impl AsyncCrawler {
             .map(|t| clean_text(&t))
             .unwrap_or_default();
 
-        // Meta description
+        // Meta description & og:site_name
         let meta_selector =
             Selector::parse(r#"meta[name="description"], meta[property="og:description"]"#)
                 .unwrap();
@@ -105,6 +131,16 @@ impl AsyncCrawler {
             .next()
             .and_then(|el| el.value().attr("content"))
             .map(|s| clean_text(s));
+
+        let site_name_selector =
+            Selector::parse(r#"meta[property="og:site_name"], meta[name="application-name"]"#)
+                .unwrap();
+        let site_name = document
+            .select(&site_name_selector)
+            .next()
+            .and_then(|el| el.value().attr("content"))
+            .map(clean_text)
+            .filter(|s| s.len() >= 2 && s.len() <= 80);
 
         // Extract body text while strictly excluding <script>, <style>, <noscript>, <svg>
         let body_selector = Selector::parse("body").unwrap();
@@ -134,9 +170,9 @@ impl AsyncCrawler {
                 }
             }
         }
-        let cleaned_text = text_parts.join(" ");
+        let cleaned_text = text_parts.join("\n");
 
-        // Extract mailto: and tel: links
+        // Extract mailto:, tel:, and WhatsApp links
         let link_selector = Selector::parse("a[href]").unwrap();
         let mut emails = Vec::new();
         let mut phones = Vec::new();
@@ -165,14 +201,23 @@ impl AsyncCrawler {
                     if clean_phone.len() >= 6 && !phones.contains(&clean_phone) {
                         phones.push(clean_phone);
                     }
+                } else if let Some(wa_phone) = extract_whatsapp_from_href(href) {
+                    if !phones.contains(&wa_phone) {
+                        phones.push(wa_phone);
+                    }
                 }
             }
         }
 
-        // Also scan body text for valid email addresses
+        // Also scan body text for valid email addresses and WhatsApp / phone numbers
         for email in extract_valid_emails(&cleaned_text) {
             if !emails.contains(&email) {
                 emails.push(email);
+            }
+        }
+        for phone in extract_phones_and_whatsapp(&cleaned_text) {
+            if !phones.contains(&phone) {
+                phones.push(phone);
             }
         }
 
@@ -181,6 +226,7 @@ impl AsyncCrawler {
             final_url,
             http_status: status.as_u16(),
             page_title,
+            site_name,
             meta_description,
             clean_text: cleaned_text,
             emails,

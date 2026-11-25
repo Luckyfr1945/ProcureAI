@@ -3,122 +3,232 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Direktori Supplier - ProcureAI</title>
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1e2126" media="(prefers-color-scheme: dark)">
+  <title>Daftar Supplier – ProcureAI</title>
+  <script>
+    (function(){try{var t=localStorage.getItem('procure_theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+  </script>
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-  <!-- Navbar -->
-  <nav class="navbar">
-    <a href="/index.html" class="brand">
-      ProcureAI
-      <span class="brand-badge">Purchasing</span>
-    </a>
-    <div class="nav-links">
-      <a href="/index.html">Dashboard</a>
-      <a href="/search.html">Pencarian Supplier</a>
-      <a href="/suppliers.html" class="active">Direktori Supplier</a>
-      <div class="user-badge">
-        <span id="user-display">Loading...</span>
-        <button onclick="logout()" class="btn btn-secondary btn-sm" style="margin-left: 0.5rem;">Logout</button>
-      </div>
-    </div>
-  </nav>
+  <a class="skip-link" href="#main-content">Lewati ke konten utama</a>
+  <div class="app-shell">
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
-  <main class="container">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-      <div>
-        <h1 style="font-size: 1.8rem;">Database & Direktori Supplier</h1>
-        <p style="color: var(--text-muted); font-size: 0.95rem;">Daftar canonical supplier hasil pengumpulan deep search dan verifikasi purchasing.</p>
+    <aside class="sidebar" id="app-sidebar" aria-label="Navigasi utama">
+      <div class="sidebar-header">
+        <a href="/index.html" class="brand" translate="no">ProcureAI <span class="brand-sub">Purchasing</span></a>
       </div>
-      <a href="/search.html" class="btn">🔍 Temukan Supplier Baru</a>
-    </div>
 
-    <!-- Filter Bar -->
-    <div class="card" style="padding: 1rem 1.5rem;">
-      <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem;">
-        <div>
-          <input type="text" id="supplier-filter-search" placeholder="Cari nama perusahaan, negara, atau kategori...">
+      <nav class="sidebar-nav">
+        <div class="nav-list">
+          <a href="/index.html" class="nav-item">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+            <span>Ringkasan</span>
+          </a>
+          <a href="/search.html" class="nav-item">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <span>Cari Supplier</span>
+          </a>
+          <a href="/suppliers.html" class="nav-item active" aria-current="page">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><path d="M9 9v.01"/><path d="M9 12v.01"/><path d="M9 15v.01"/><path d="M9 18v.01"/></svg>
+            <span>Daftar Supplier</span>
+          </a>
         </div>
-        <div>
-          <select id="supplier-filter-status">
-            <option value="">Semua Status Verifikasi</option>
-            <option value="unverified">Unverified</option>
-            <option value="discovered">Discovered</option>
-            <option value="extracted">Extracted</option>
-            <option value="verified">Verified</option>
-            <option value="contacted">Contacted</option>
-            <option value="approved">Approved</option>
-          </select>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button type="button" class="theme-toggle" data-theme-toggle>
+          <svg data-icon-sun aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+          <svg data-icon-moon aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+          <span data-theme-label>Mode Gelap</span>
+        </button>
+
+        <div class="user-card">
+          <div class="user-info">
+            <div class="user-avatar" id="user-avatar" aria-hidden="true">AD</div>
+            <div class="user-meta">
+              <div class="user-name" id="user-display">Memuat…</div>
+              <div class="user-role" id="user-role">purchasing</div>
+            </div>
+          </div>
+          <button type="button" onclick="logout()" class="icon-btn" title="Keluar" aria-label="Keluar dari akun">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          </button>
         </div>
       </div>
-    </div>
+    </aside>
 
-    <!-- Supplier Table -->
-    <div class="card">
-      <div class="table-responsive">
-        <table>
-          <thead>
-            <tr>
-              <th>Perusahaan</th>
-              <th>Website</th>
-              <th>Negara</th>
-              <th>Kategori</th>
-              <th>Status</th>
-              <th>Aksi</th>
-            </tr>
-          </thead>
-          <tbody id="suppliers-directory-tbody">
-            <tr><td colspan="6" style="text-align: center; color: var(--text-muted)">Memuat data supplier...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </main>
+    <div class="workspace-main">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button type="button" class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Buka menu navigasi">
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div class="topbar-breadcrumb">
+            <span translate="no">ProcureAI</span>
+            <span aria-hidden="true">/</span>
+            <span class="crumb-current">Daftar Supplier</span>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <a href="/search.html" class="btn btn-sm">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span class="hide-mobile">Cari supplier baru</span>
+          </a>
+        </div>
+      </header>
 
-  <!-- Modal Detail Supplier -->
-  <div class="modal" id="supplier-modal">
+      <main class="container" id="main-content">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Daftar Supplier</h1>
+            <p class="page-subtitle">Semua vendor tersimpan, lengkap dengan kontak, sumber, dan status pengecekan.</p>
+          </div>
+          <div class="page-header-actions">
+            <span class="cell-muted num-cell" id="suppliers-count-badge" aria-live="polite">Memuat supplier…</span>
+          </div>
+        </div>
+
+        <section class="card">
+          <div class="card-body">
+            <div class="filter-toolbar">
+              <div class="input-with-icon">
+                <label class="filter-label" for="supplier-filter-search">Cari</label>
+                <svg class="input-icon-left" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                <input type="search" id="supplier-filter-search" name="q" autocomplete="off" placeholder="Nama perusahaan, negara, domain, atau kategori…">
+              </div>
+              <div>
+                <label class="filter-label" for="supplier-filter-status">Status pengecekan</label>
+                <select id="supplier-filter-status" name="status">
+                  <option value="">Semua status</option>
+                  <option value="discovered">Ditemukan web (otomatis)</option>
+                  <option value="verified_by_purchasing">Sudah dicek Purchasing</option>
+                  <option value="contacted">Sudah dihubungi</option>
+                  <option value="approved">Vendor disetujui</option>
+                  <option value="rejected">Ditolak</option>
+                </select>
+              </div>
+              <button type="button" id="reset-supplier-filters" class="btn btn-ghost">Reset filter</button>
+              <button type="button" onclick="loadSuppliersList()" class="btn btn-secondary">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+                Muat ulang
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card" aria-label="Tabel supplier">
+          <div class="card-body flush">
+            <div class="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Perusahaan</th>
+                    <th scope="col">Website</th>
+                    <th scope="col">Lokasi</th>
+                    <th scope="col">Tipe &amp; kategori</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="suppliers-directory-tbody">
+                  <tr><td colspan="6" class="cell-muted" style="text-align: center; padding: 2rem;">Memuat data supplier…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Panel detail supplier -->
+  <div class="modal" id="supplier-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="modal-content">
-      <span class="close-btn" onclick="closeModal()">&times;</span>
-      <h2 id="modal-title" style="margin-bottom: 0.25rem;">Supplier Name</h2>
-      <div style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;" id="modal-domain">domain.com</div>
-      <div style="margin-bottom: 1.5rem;">
-        <span class="badge badge-info" id="modal-status-badge">status</span>
-      </div>
-
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; font-size: 0.9rem;">
-        <div><strong>Lokasi:</strong> <span id="modal-country">-</span></div>
-        <div><strong>Email:</strong> <span id="modal-email">-</span></div>
-        <div><strong>Telepon:</strong> <span id="modal-phone">-</span></div>
-      </div>
-
-      <div style="margin-bottom: 1.5rem;">
-        <strong>Deskripsi:</strong>
-        <p id="modal-desc" style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;"></p>
-      </div>
-
-      <div style="margin-bottom: 1.5rem; padding: 1rem; background: var(--bg-tertiary); border-radius: var(--radius);">
-        <label for="modal-verification-status">Perbarui Status Verifikasi Purchasing:</label>
-        <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-          <select id="modal-verification-status">
-            <option value="unverified">Unverified</option>
-            <option value="discovered">Discovered</option>
-            <option value="extracted">Extracted</option>
-            <option value="verified">Verified</option>
-            <option value="contacted">Contacted</option>
-            <option value="approved">Approved</option>
-          </select>
-          <button class="btn btn-sm" id="modal-save-status-btn">Simpan</button>
+      <div class="drawer-header">
+        <div class="drawer-title-wrap">
+          <h2 class="drawer-title" id="modal-title">Nama supplier</h2>
+          <div class="drawer-domain" id="modal-domain"></div>
+        </div>
+        <div class="drawer-header-right">
+          <span class="badge badge-info" id="modal-status-badge"></span>
+          <button type="button" class="close-btn" onclick="closeModal()" aria-label="Tutup panel detail">&times;</button>
         </div>
       </div>
 
-      <div style="margin-bottom: 1.5rem;">
-        <h4 style="margin-bottom: 0.5rem;">Katalog & Produk Terdeteksi:</h4>
-        <div id="modal-products-list"></div>
-      </div>
+      <div class="drawer-body">
+        <div class="drawer-meta-grid">
+          <div class="meta-item">
+            <span class="meta-label">Lokasi</span>
+            <span class="meta-value" id="modal-country">–</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Tipe supplier</span>
+            <span class="meta-value" id="modal-type">–</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Email</span>
+            <span class="meta-value" id="modal-email">–</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Telepon / WhatsApp</span>
+            <span class="meta-value" id="modal-phone">–</span>
+          </div>
+          <div class="meta-item full">
+            <span class="meta-label">Alamat</span>
+            <span class="meta-value" id="modal-address">–</span>
+          </div>
+        </div>
 
-      <div>
-        <h4 style="margin-bottom: 0.5rem;">Jejak Sumber (Evidence URLs):</h4>
-        <div id="modal-sources-list"></div>
+        <div class="verification-panel">
+          <div class="verification-top">
+            <div>
+              <div class="verification-title">Status pengecekan</div>
+              <div class="verification-desc">Catat apakah supplier ini sudah dicek, dihubungi, atau disetujui.</div>
+            </div>
+            <button type="button" class="btn btn-success btn-sm" id="modal-verify-btn">Tandai sudah dicek</button>
+          </div>
+          <div class="verification-controls">
+            <select id="modal-verification-status" aria-label="Ubah status pengecekan supplier">
+              <option value="discovered">Baru ditemukan (otomatis)</option>
+              <option value="verified_by_purchasing">Sudah dicek Purchasing</option>
+              <option value="contacted">Sudah dihubungi</option>
+              <option value="approved">Vendor disetujui</option>
+              <option value="rejected">Tidak cocok / ditolak</option>
+            </select>
+            <button type="button" class="btn btn-secondary btn-sm" id="modal-save-status-btn">Simpan status</button>
+          </div>
+        </div>
+
+        <div class="drawer-tabs" role="tablist">
+          <button type="button" class="drawer-tab active" data-tab="offers" role="tab" aria-selected="true">
+            Produk <span class="tab-count" id="tab-count-offers">0</span>
+          </button>
+          <button type="button" class="drawer-tab" data-tab="evidence" role="tab" aria-selected="false">
+            Bukti <span class="tab-count" id="tab-count-evidence">0</span>
+          </button>
+          <button type="button" class="drawer-tab" data-tab="sources" role="tab" aria-selected="false">
+            Sumber <span class="tab-count" id="tab-count-sources">0</span>
+          </button>
+          <button type="button" class="drawer-tab" data-tab="rfq" role="tab" aria-selected="false">
+            Draft RFQ
+          </button>
+        </div>
+
+        <div class="drawer-panel active" data-panel="offers">
+          <div id="modal-offers-list"></div>
+        </div>
+        <div class="drawer-panel" data-panel="evidence">
+          <div id="modal-evidence-list"></div>
+        </div>
+        <div class="drawer-panel" data-panel="sources">
+          <div id="modal-sources-list"></div>
+        </div>
+        <div class="drawer-panel" data-panel="rfq">
+          <div id="modal-rfq-panel"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -129,4 +239,3 @@
   </script>
 </body>
 </html>
-

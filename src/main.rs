@@ -11,6 +11,7 @@ use tokio::net::TcpListener;
 async fn main() -> Result<(), Box<dyn Error>> {
     dotenvy::dotenv().ok();
     tracing_subscriber::fmt()
+        .log_internal_errors(false)
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "info,procure_ai=debug".into()),
@@ -18,6 +19,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .init();
 
     let config = Config::from_env();
+    config.validate()?;
     tracing::info!("Starting ProcureAI in {} environment", config.app_env);
 
     // Initialize database pool and run migrations

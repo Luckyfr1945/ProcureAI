@@ -1,39 +1,91 @@
-use crate::models::{Supplier, SupplierProduct, SupplierSource, UpdateSupplierDto};
+use crate::domain::{Supplier, SupplierSource};
 use sqlx::SqlitePool;
 
-pub async fn upsert_supplier(pool: &SqlitePool, s: &Supplier) -> anyhow::Result<i64> {
-    let id: i64 = sqlx::query_scalar(
+pub async fn upsert_supplier(pool: &SqlitePool, supplier: &Supplier) -> anyhow::Result<i64> {
+    // If normalized_domain exists, try matching by domain first
+    if let Some(domain) = &supplier.normalized_domain {
+        if !domain.is_empty() && !crate::services::entity_resolution::is_shared_supplier_platform(domain) {
+            let existing_id = sqlx::query_scalar::<_, i64>(
+                "SELECT id FROM suppliers WHERE normalized_domain = ? LIMIT 1",
+            )
+            .bind(domain)
+            .fetch_optional(pool)
+            .await?;
+
+            if let Some(id) = existing_id {
+                sqlx::query(
+                    r#"
+                    UPDATE suppliers
+                    SET canonical_name = coalesce(nullif(canonical_name, ''), ?),
+                        website = coalesce(website, ?),
+                        country_code = CASE WHEN EXISTS(SELECT 1 FROM supplier_profile_corrections c WHERE c.supplier_id=suppliers.id) THEN country_code ELSE coalesce(?, country_code) END,
+                        country_name = CASE WHEN EXISTS(SELECT 1 FROM supplier_profile_corrections c WHERE c.supplier_id=suppliers.id) THEN country_name ELSE coalesce(?, country_name) END,
+                        address = CASE WHEN EXISTS(SELECT 1 FROM supplier_profile_corrections c WHERE c.supplier_id=suppliers.id) THEN address ELSE coalesce(?, address) END,
+                        supplier_type = coalesce(nullif(?, 'unknown'), supplier_type),
+                        business_category = coalesce(business_category, ?),
+                        public_email = CASE WHEN EXISTS(SELECT 1 FROM supplier_profile_corrections c WHERE c.supplier_id=suppliers.id) THEN public_email ELSE coalesce(?, public_email) END,
+                        public_phone = CASE WHEN EXISTS(SELECT 1 FROM supplier_profile_corrections c WHERE c.supplier_id=suppliers.id) THEN public_phone ELSE coalesce(?, public_phone) END,
+                        contact_page_url = coalesce(contact_page_url, ?),
+                        updated_at = datetime('now')
+                    WHERE id = ?
+                    "#,
+                )
+                .bind(&supplier.canonical_name)
+                .bind(&supplier.website)
+                .bind(&supplier.country_code)
+                .bind(&supplier.country_name)
+                .bind(&supplier.address)
+                .bind(supplier.supplier_type.as_deref().unwrap_or("unknown"))
+                .bind(&supplier.business_category)
+                .bind(&supplier.public_email)
+                .bind(&supplier.public_phone)
+                .bind(&supplier.contact_page_url)
+                .bind(id)
+                .execute(pool)
+                .await?;
+
+                return Ok(id);
+            }
+        }
+    }
+
+    // Try matching by normalized_name if domain didn't match
+    let existing_name_id = sqlx::query_scalar::<_, i64>(
+        "SELECT id FROM suppliers WHERE normalized_name = ? AND coalesce(country_code,'') = coalesce(?,'') AND (normalized_domain IS NULL OR ? IS NULL OR normalized_domain=?) LIMIT 1",
+    )
+    .bind(&supplier.normalized_name).bind(&supplier.country_code).bind(&supplier.normalized_domain).bind(&supplier.normalized_domain)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some(id) = existing_name_id {
+        return Ok(id);
+    }
+
+    let id = sqlx::query_scalar::<_, i64>(
         r#"
         INSERT INTO suppliers (
-            canonical_key, company_name, normalized_name, website, domain,
-            country, city, email, phone, category, description, verification_status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        ON CONFLICT(canonical_key) DO UPDATE SET
-            company_name = COALESCE(excluded.company_name, suppliers.company_name),
-            website = COALESCE(excluded.website, suppliers.website),
-            domain = COALESCE(excluded.domain, suppliers.domain),
-            country = COALESCE(excluded.country, suppliers.country),
-            city = COALESCE(excluded.city, suppliers.city),
-            email = COALESCE(excluded.email, suppliers.email),
-            phone = COALESCE(excluded.phone, suppliers.phone),
-            category = COALESCE(excluded.category, suppliers.category),
-            description = COALESCE(excluded.description, suppliers.description),
-            updated_at = CURRENT_TIMESTAMP
+            canonical_name, normalized_name, website, normalized_domain,
+            country_code, country_name, address, supplier_type,
+            business_category, public_email, public_phone, contact_page_url,
+            status, created_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
         RETURNING id
         "#,
     )
-    .bind(&s.canonical_key)
-    .bind(&s.company_name)
-    .bind(&s.normalized_name)
-    .bind(&s.website)
-    .bind(&s.domain)
-    .bind(&s.country)
-    .bind(&s.city)
-    .bind(&s.email)
-    .bind(&s.phone)
-    .bind(&s.category)
-    .bind(&s.description)
-    .bind(&s.verification_status)
+    .bind(&supplier.canonical_name)
+    .bind(&supplier.normalized_name)
+    .bind(&supplier.website)
+    .bind(&supplier.normalized_domain)
+    .bind(&supplier.country_code)
+    .bind(&supplier.country_name)
+    .bind(&supplier.address)
+    .bind(supplier.supplier_type.as_deref().unwrap_or("unknown"))
+    .bind(&supplier.business_category)
+    .bind(&supplier.public_email)
+    .bind(&supplier.public_phone)
+    .bind(&supplier.contact_page_url)
+    .bind(&supplier.status)
     .fetch_one(pool)
     .await?;
 
@@ -43,10 +95,11 @@ pub async fn upsert_supplier(pool: &SqlitePool, s: &Supplier) -> anyhow::Result<
 pub async fn get_supplier_by_id(pool: &SqlitePool, id: i64) -> anyhow::Result<Option<Supplier>> {
     let supplier = sqlx::query_as::<_, Supplier>(
         r#"
-        SELECT id, canonical_key, company_name, normalized_name, website, domain,
-               country, city, email, phone, category, description, verification_status,
-               created_at, updated_at
-        FROM suppliers WHERE id = $1
+        SELECT id, canonical_name, normalized_name, website, normalized_domain,
+               country_code, country_name, address, supplier_type, business_category,
+               public_email, public_phone, contact_page_url, status, created_at, updated_at
+        FROM suppliers
+        WHERE id = ?
         "#,
     )
     .bind(id)
@@ -56,19 +109,21 @@ pub async fn get_supplier_by_id(pool: &SqlitePool, id: i64) -> anyhow::Result<Op
     Ok(supplier)
 }
 
-pub async fn get_supplier_by_canonical_key(
+pub async fn get_supplier_by_domain(
     pool: &SqlitePool,
-    key: &str,
+    domain: &str,
 ) -> anyhow::Result<Option<Supplier>> {
     let supplier = sqlx::query_as::<_, Supplier>(
         r#"
-        SELECT id, canonical_key, company_name, normalized_name, website, domain,
-               country, city, email, phone, category, description, verification_status,
-               created_at, updated_at
-        FROM suppliers WHERE canonical_key = $1
+        SELECT id, canonical_name, normalized_name, website, normalized_domain,
+               country_code, country_name, address, supplier_type, business_category,
+               public_email, public_phone, contact_page_url, status, created_at, updated_at
+        FROM suppliers
+        WHERE normalized_domain = ?
+        LIMIT 1
         "#,
     )
-    .bind(key)
+    .bind(domain)
     .fetch_optional(pool)
     .await?;
 
@@ -79,186 +134,164 @@ pub async fn list_suppliers(
     pool: &SqlitePool,
     limit: i64,
     offset: i64,
-    country_filter: Option<&str>,
     status_filter: Option<&str>,
+    country_filter: Option<&str>,
 ) -> anyhow::Result<Vec<Supplier>> {
-    let mut query = String::from(
+    let mut query_str = String::from(
         r#"
-        SELECT id, canonical_key, company_name, normalized_name, website, domain,
-               country, city, email, phone, category, description, verification_status,
-               created_at, updated_at
+        SELECT id, canonical_name, normalized_name, website, normalized_domain,
+               country_code, country_name, address, supplier_type, business_category,
+               public_email, public_phone, contact_page_url, status, created_at, updated_at
         FROM suppliers
         WHERE 1=1
         "#,
     );
 
-    if country_filter.is_some() {
-        query.push_str(" AND country = $3");
-    }
     if status_filter.is_some() {
-        query.push_str(" AND verification_status = $4");
+        query_str.push_str(" AND status = ?");
+    }
+    if country_filter.is_some() {
+        query_str.push_str(" AND (country_name LIKE ? OR country_code = ?)");
     }
 
-    query.push_str(" ORDER BY id DESC LIMIT $1 OFFSET $2");
+    query_str.push_str(" ORDER BY updated_at DESC LIMIT ? OFFSET ?");
 
-    let mut q = sqlx::query_as::<_, Supplier>(&query)
-        .bind(limit)
-        .bind(offset);
+    let mut q = sqlx::query_as::<_, Supplier>(&query_str);
 
-    if let Some(cf) = country_filter {
-        q = q.bind(cf);
+    if let Some(status) = status_filter {
+        q = q.bind(status);
     }
-    if let Some(sf) = status_filter {
-        q = q.bind(sf);
+    if let Some(country) = country_filter {
+        let pattern = format!("%{}%", country);
+        q = q.bind(pattern).bind(country);
     }
 
-    let list = q.fetch_all(pool).await?;
-    Ok(list)
+    q = q.bind(limit).bind(offset);
+
+    let suppliers = q.fetch_all(pool).await?;
+    Ok(suppliers)
 }
 
-pub async fn update_supplier(
+pub async fn count_suppliers(pool: &SqlitePool) -> anyhow::Result<i64> {
+    let count = sqlx::query_scalar::<_, i64>("SELECT count(*) FROM suppliers")
+        .fetch_one(pool)
+        .await?;
+    Ok(count)
+}
+
+pub async fn count_verified_suppliers(pool: &SqlitePool) -> anyhow::Result<i64> {
+    let count = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM suppliers WHERE status = 'verified_by_purchasing'",
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
+}
+
+pub async fn update_supplier_status(
     pool: &SqlitePool,
     id: i64,
-    dto: UpdateSupplierDto,
-) -> anyhow::Result<Option<Supplier>> {
-    let existing = match get_supplier_by_id(pool, id).await? {
-        Some(s) => s,
-        None => return Ok(None),
-    };
-
-    let company_name = dto.company_name.unwrap_or(existing.company_name);
-    let website = dto.website.or(existing.website);
-    let country = dto.country.or(existing.country);
-    let city = dto.city.or(existing.city);
-    let email = dto.email.or(existing.email);
-    let phone = dto.phone.or(existing.phone);
-    let category = dto.category.or(existing.category);
-    let description = dto.description.or(existing.description);
-    let verification_status = dto
-        .verification_status
-        .unwrap_or(existing.verification_status);
-
-    let updated = sqlx::query_as::<_, Supplier>(
+    status: &str,
+) -> anyhow::Result<()> {
+    sqlx::query(
         r#"
         UPDATE suppliers
-        SET company_name = $1, website = $2, country = $3, city = $4, email = $5,
-            phone = $6, category = $7, description = $8, verification_status = $9,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = $10
-        RETURNING id, canonical_key, company_name, normalized_name, website, domain,
-                  country, city, email, phone, category, description, verification_status,
-                  created_at, updated_at
+        SET status = ?, updated_at = datetime('now')
+        WHERE id = ?
         "#,
     )
-    .bind(company_name)
-    .bind(website)
-    .bind(country)
-    .bind(city)
-    .bind(email)
-    .bind(phone)
-    .bind(category)
-    .bind(description)
-    .bind(verification_status)
+    .bind(status)
     .bind(id)
-    .fetch_optional(pool)
+    .execute(pool)
     .await?;
 
-    Ok(updated)
+    Ok(())
 }
 
-pub async fn insert_source(
+pub async fn update_supplier_profile(
     pool: &SqlitePool,
-    supplier_id: i64,
-    crawl_page_id: Option<i64>,
-    source_url: &str,
-    source_type: Option<&str>,
-    evidence_json: Option<&str>,
+    id: i64,
+    canonical_name: Option<&str>,
+    public_email: Option<&str>,
+    public_phone: Option<&str>,
+    supplier_type: Option<&str>,
+    address: Option<&str>,
+    status: Option<&str>,
+) -> anyhow::Result<()> {
+    sqlx::query(
+        r#"
+        UPDATE suppliers
+        SET canonical_name = coalesce(?, canonical_name),
+            public_email = coalesce(?, public_email),
+            public_phone = coalesce(?, public_phone),
+            supplier_type = coalesce(?, supplier_type),
+            address = coalesce(?, address),
+            status = coalesce(?, status),
+            updated_at = datetime('now')
+        WHERE id = ?
+        "#,
+    )
+    .bind(canonical_name)
+    .bind(public_email)
+    .bind(public_phone)
+    .bind(supplier_type)
+    .bind(address)
+    .bind(status)
+    .bind(id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn add_supplier_source(
+    pool: &SqlitePool,
+    source: &SupplierSource,
 ) -> anyhow::Result<i64> {
-    let id: i64 = sqlx::query_scalar(
+    let id = sqlx::query_scalar::<_, i64>(
         r#"
         INSERT INTO supplier_sources (
-            supplier_id, crawl_page_id, source_url, source_type, evidence_json
-        ) VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT(supplier_id, source_url) DO UPDATE SET
-            evidence_json = COALESCE(excluded.evidence_json, supplier_sources.evidence_json)
+            supplier_id, url, canonical_url, page_type, page_title,
+            content_hash, retrieved_at, http_status, source_type
+        )
+        VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?)
+        ON CONFLICT(supplier_id, canonical_url) DO UPDATE SET
+            page_title = coalesce(excluded.page_title, supplier_sources.page_title),
+            retrieved_at = datetime('now'),
+            http_status = excluded.http_status
         RETURNING id
         "#,
     )
-    .bind(supplier_id)
-    .bind(crawl_page_id)
-    .bind(source_url)
-    .bind(source_type)
-    .bind(evidence_json)
+    .bind(source.supplier_id)
+    .bind(&source.url)
+    .bind(&source.canonical_url)
+    .bind(source.page_type.as_deref().unwrap_or("company"))
+    .bind(&source.page_title)
+    .bind(&source.content_hash)
+    .bind(source.http_status.unwrap_or(200))
+    .bind(source.source_type.as_deref().unwrap_or("web"))
     .fetch_one(pool)
     .await?;
 
     Ok(id)
 }
 
-pub async fn get_sources(
+pub async fn get_supplier_sources(
     pool: &SqlitePool,
     supplier_id: i64,
 ) -> anyhow::Result<Vec<SupplierSource>> {
-    let list = sqlx::query_as::<_, SupplierSource>(
+    let sources = sqlx::query_as::<_, SupplierSource>(
         r#"
-        SELECT id, supplier_id, crawl_page_id, source_url, source_type, evidence_json, extracted_at
+        SELECT id, supplier_id, url, canonical_url, page_type, page_title,
+               content_hash, retrieved_at, http_status, source_type
         FROM supplier_sources
-        WHERE supplier_id = $1
-        ORDER BY id ASC
+        WHERE supplier_id = ?
+        ORDER BY retrieved_at DESC
         "#,
     )
     .bind(supplier_id)
     .fetch_all(pool)
     .await?;
 
-    Ok(list)
-}
-
-pub async fn insert_product(pool: &SqlitePool, p: &SupplierProduct) -> anyhow::Result<i64> {
-    let id: i64 = sqlx::query_scalar(
-        r#"
-        INSERT INTO supplier_products (
-            supplier_id, source_id, product_name, brand, model_or_specification,
-            price_amount, price_currency, minimum_order_quantity, availability_note,
-            product_url, price_observed_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-        RETURNING id
-        "#,
-    )
-    .bind(p.supplier_id)
-    .bind(p.source_id)
-    .bind(&p.product_name)
-    .bind(&p.brand)
-    .bind(&p.model_or_specification)
-    .bind(p.price_amount)
-    .bind(&p.price_currency)
-    .bind(&p.minimum_order_quantity)
-    .bind(&p.availability_note)
-    .bind(&p.product_url)
-    .bind(&p.price_observed_at)
-    .fetch_one(pool)
-    .await?;
-
-    Ok(id)
-}
-
-pub async fn get_products(
-    pool: &SqlitePool,
-    supplier_id: i64,
-) -> anyhow::Result<Vec<SupplierProduct>> {
-    let list = sqlx::query_as::<_, SupplierProduct>(
-        r#"
-        SELECT id, supplier_id, source_id, product_name, brand, model_or_specification,
-               price_amount, price_currency, minimum_order_quantity, availability_note,
-               product_url, price_observed_at
-        FROM supplier_products
-        WHERE supplier_id = $1
-        ORDER BY id ASC
-        "#,
-    )
-    .bind(supplier_id)
-    .fetch_all(pool)
-    .await?;
-
-    Ok(list)
+    Ok(sources)
 }

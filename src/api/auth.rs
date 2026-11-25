@@ -37,7 +37,7 @@ pub async fn login(
     State(state): State<AppState>,
     Json(dto): Json<LoginDto>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    if dto.username.trim().is_empty() || dto.password.trim().is_empty() {
+    if dto.username.len() > 200 || dto.password.len() > 4096 || dto.username.trim().is_empty() || dto.password.trim().is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(json!({
@@ -49,6 +49,17 @@ pub async fn login(
         ));
     }
 
+    let rate_error = || (StatusCode::TOO_MANY_REQUESTS, Json(json!({"error":{"message":"Terlalu banyak percobaan masuk. Coba lagi setelah 15 menit."}})));
+    let _slot = state.login_slots.try_acquire().map_err(|_| rate_error())?;
+    let key = dto.username.trim().to_lowercase();
+    {
+        let mut attempts = state.login_attempts.lock().await;
+        attempts.retain(|_, (_, at)| at.elapsed() < std::time::Duration::from_secs(900));
+        if attempts.len() >= 10000 && !attempts.contains_key(&key) { return Err(rate_error()); }
+        let entry = attempts.entry(key.clone()).or_insert((0, std::time::Instant::now()));
+        if entry.0 >= 5 { return Err(rate_error()); }
+        entry.0 += 1;
+    }
     let user = users::get_user_by_username(&state.db, &dto.username)
         .await
         .map_err(|e| {
@@ -90,7 +101,11 @@ pub async fn login(
         ));
     }
 
-    if !verify_password(&dto.password, &user.password_hash) {
+    let password = dto.password.clone();
+    let hash = user.password_hash.clone();
+    let valid = tokio::task::spawn_blocking(move || verify_password(&password, &hash)).await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":{"message":"Gagal memeriksa akun"}}))))?;
+    if !valid {
         return Err((
             StatusCode::UNAUTHORIZED,
             Json(json!({
@@ -102,6 +117,7 @@ pub async fn login(
         ));
     }
 
+    state.login_attempts.lock().await.remove(&key);
     // 7 days token expiration
     let duration_secs = 7 * 24 * 3600;
     let token = create_session_token(
@@ -123,9 +139,14 @@ pub async fn login(
         )
     })?;
 
+    let secure = if state.config.app_env == "production" {
+        "; Secure"
+    } else {
+        ""
+    };
     let cookie_val = format!(
-        "session={}; Path=/; HttpOnly; SameSite=Lax; Max-Age={}",
-        token, duration_secs
+        "session={}; Path=/; HttpOnly; SameSite=Lax; Max-Age={}{}",
+        token, duration_secs, secure
     );
 
     let mut headers = HeaderMap::new();
@@ -146,19 +167,48 @@ pub async fn login(
     Ok((StatusCode::OK, headers, resp_body))
 }
 
-pub async fn logout() -> impl IntoResponse {
-    let mut headers = HeaderMap::new();
-    if let Ok(val) = HeaderValue::from_str("session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0") {
-        headers.insert(header::SET_COOKIE, val);
+pub async fn logout(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    if let Some(token) = crate::auth::middleware::request_token(&headers) {
+        if let Ok(claims) =
+            crate::auth::session::verify_session_token(&token, &state.config.session_secret)
+        {
+            sqlx::query(
+                "INSERT OR IGNORE INTO revoked_sessions(token_hash,expires_at) VALUES (?,?)",
+            )
+            .bind(crate::auth::middleware::token_hash(&token))
+            .bind(claims.exp)
+            .execute(&state.db)
+            .await
+            .map_err(|_| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error":{"message":"Gagal mengakhiri sesi"}})),
+                )
+            })?;
+        }
     }
-
-    (
+    let mut headers = HeaderMap::new();
+    let secure = if state.config.app_env == "production" {
+        "; Secure"
+    } else {
+        ""
+    };
+    headers.insert(
+        header::SET_COOKIE,
+        HeaderValue::from_str(&format!(
+            "session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{}",
+            secure
+        ))
+        .unwrap(),
+    );
+    Ok((
         StatusCode::OK,
         headers,
-        Json(json!({
-            "message": "Logged out successfully"
-        })),
-    )
+        Json(json!({"message":"Logged out successfully"})),
+    ))
 }
 
 pub async fn me(auth_user: AuthenticatedUser) -> impl IntoResponse {
@@ -188,7 +238,7 @@ pub async fn register_user(
         ));
     }
 
-    if dto.username.trim().is_empty() || dto.password.trim().is_empty() {
+    if dto.username.len() > 200 || dto.password.len() > 4096 || dto.username.trim().is_empty() || dto.password.trim().is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(json!({
